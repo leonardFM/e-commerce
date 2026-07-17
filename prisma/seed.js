@@ -16,6 +16,16 @@ async function main() {
       email: 'admin@solutech.test',
       name: 'Solutech Admin',
       passwordHash,
+      role: 'ADMIN',
+    },
+  })
+
+  const customer = await prisma.user.create({
+    data: {
+      email: 'customer@solutech.test',
+      name: 'Solutech Customer',
+      passwordHash,
+      role: 'CUSTOMER',
     },
   })
 
@@ -28,6 +38,7 @@ async function main() {
   })
 
   console.log(`Seeded user ${user.email} with password password123`)
+  console.log(`Seeded user ${customer.email} with password password123`)
 }
 
 main()

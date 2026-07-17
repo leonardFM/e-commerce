@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { failure, success } from '@/lib/response'
-import { requireUser } from '@/lib/request'
+import { requireRole, requireUser } from '@/lib/request'
 import { updateProductSchema } from '@/modules/products/product.schema'
 import { deleteProductService, getProductService, updateProductService } from '@/modules/products/product.service'
 import { AppError } from '@/lib/errors'
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await requireUser(request)
+    await requireRole(request, 'ADMIN')
     const { id } = await params
     const body = updateProductSchema.parse(await request.json())
     if (Object.keys(body).length === 0) throw new AppError('Request body cannot be empty', 400)
@@ -35,7 +35,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await requireUser(request)
+    await requireRole(request, 'ADMIN')
     const { id } = await params
     await deleteProductService(parseId(id))
     return success({ deleted: true })

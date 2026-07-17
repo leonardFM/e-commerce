@@ -1,8 +1,15 @@
+DO $$ BEGIN
+  CREATE TYPE "UserRole" AS ENUM ('ADMIN', 'CUSTOMER');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+
 CREATE TABLE IF NOT EXISTS "User" (
   id SERIAL PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,
   "passwordHash" TEXT NOT NULL,
   name TEXT,
+  role "UserRole" NOT NULL DEFAULT 'CUSTOMER',
   "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
   "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
 );

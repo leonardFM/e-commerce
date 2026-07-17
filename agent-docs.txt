@@ -1,0 +1,333 @@
+Agent, Skill, Command, Rule Audit
+=================================
+
+Project: Solutech Commerce Next.js/Prisma API
+Audit scope: .opencode/agents, .opencode/skills, .opencode/commands, .opencode/rules, .opencode/docs
+
+Ringkasan Status
+----------------
+
+- Struktur utama .opencode sudah ada: agents, commands, docs, rules, skills.
+- Primary agents tersedia di .opencode/agents/:
+  - implementer.md
+  - tasks.md
+- Subagents tersedia di .opencode/agents/subagent/:
+  - api-implementer.md
+  - auth-security-reviewer.md
+  - code-reviewer.md
+  - create-task-from-plan.md
+  - prisma-reviewer.md
+  - test-reviewer.md
+- Skills tersedia di .opencode/skills/:
+  - api-testing
+  - auth-rbac
+  - ecommerce-order
+  - layered-api
+  - prisma-database
+- Commands tersedia di .opencode/commands/:
+  - review-api.md
+  - review-auth.md
+  - review-prisma.md
+  - test-api.md
+- Rules tersedia di .opencode/rules/:
+  - architecture.md
+  - coding-standard.md
+  - database.md
+  - security.md
+- Docs workspace tersedia di .opencode/docs/:
+  - implement/
+  - task/
+  - plan/
+
+Koneksi Dan Konsistensi
+-----------------------
+
+- AGENTS.md menjadi instruksi utama repository dan direferensikan oleh primary agents tasks dan implementer.
+- implementer.md sudah terhubung ke task docs melalui .opencode/docs/task/ dan plan docs melalui .opencode/docs/plan/.
+- implementer.md sudah mereferensikan subagents review di .opencode/agents/subagent/.
+- tasks.md sudah terhubung ke plan docs di .opencode/docs/plan/ dan subagent create-task-from-plan.md.
+- create-task-from-plan.md sudah menulis task default ke .opencode/docs/task/.
+- Skills sesuai domain project dan melengkapi workflow manual: API testing, auth, order, layered API, Prisma/database.
+- Rules sesuai dengan arsitektur repo dan dapat dipakai sebagai guardrail tambahan.
+- Commands saat ini memakai frontmatter agent seperti code-reviewer, auth-security-reviewer, prisma-reviewer, dan test-reviewer. File agent tersebut sekarang berada di .opencode/agents/subagent/. Jika Opencode hanya resolve agent berdasarkan nama file, command kemungkinan tetap terhubung. Jika Opencode membutuhkan path folder eksplisit, command perlu disesuaikan ke path subagent atau file agent perlu ditempatkan sesuai konvensi tool.
+- Tidak ditemukan file .opencode/opencode.json atau .opencode.json yang mendefinisikan alias agent tambahan.
+
+Primary Agents
+--------------
+
+1. .opencode/agents/implementer.md
+
+Tugas:
+- Mengimplementasikan task yang dipilih user dari task docs lokal.
+- Membaca AGENTS.md terlebih dahulu.
+- Menentukan active task backlog dari instruksi user atau .opencode/docs/task/tasks.md.
+- Membaca task, plan terkait, dan implement note terkait sebelum edit.
+- Menjaga arsitektur route/schema/service/repository/types.
+- Menjalankan implementasi minimal dan lokal ke scope task.
+- Memicu review subagent sesuai area perubahan.
+- Mengupdate task backlog setelah task selesai atau blocked.
+- Menjalankan verifikasi seperti npm run lint, npm run build, atau npm run prisma:generate sesuai jenis perubahan.
+
+Terhubung ke:
+- AGENTS.md
+- .opencode/docs/task/
+- .opencode/docs/plan/
+- .opencode/docs/implement/
+- .opencode/agents/subagent/api-implementer.md
+- .opencode/agents/subagent/auth-security-reviewer.md
+- .opencode/agents/subagent/prisma-reviewer.md
+- .opencode/agents/subagent/code-reviewer.md
+- .opencode/agents/subagent/test-reviewer.md
+
+2. .opencode/agents/tasks.md
+
+Tugas:
+- Mengkoordinasikan pembuatan task file dari plan yang dipilih user.
+- Menentukan plan dari path langsung atau judul plan di .opencode/docs/plan/.
+- Bertanya jika tidak ada plan atau hasil match ambigu.
+- Mendelegasikan pembuatan task ke create-task-from-plan.md.
+- Melaporkan path task file yang dibuat, source plan, asal nama file, dan asumsi/blocker.
+
+Terhubung ke:
+- AGENTS.md
+- .opencode/docs/plan/
+- .opencode/docs/task/
+- .opencode/agents/subagent/create-task-from-plan.md
+
+Subagents
+---------
+
+1. .opencode/agents/subagent/api-implementer.md
+
+Tugas:
+- Mengimplementasikan endpoint API Next.js App Router dengan arsitektur berlapis.
+- Menjaga route handler tetap tipis.
+- Memastikan Prisma tidak dipakai langsung di route handler.
+- Memakai requireUser untuk endpoint protected.
+- Memakai AppError, success, dan failure secara konsisten.
+- Menjalankan npm run lint dan npm run build jika memungkinkan.
+
+Dipakai oleh:
+- implementer.md ketika perubahan menyentuh endpoint API atau pola implementasi route/service/repository.
+
+2. .opencode/agents/subagent/auth-security-reviewer.md
+
+Tugas:
+- Mereview auth, authorization, JWT, bearer token, protected route, login, dan user-scoped data.
+- Fokus pada lib/auth.ts, lib/request.ts, modules/auth/**, route protected, dan .env.example.
+- Menghasilkan findings berurutan berdasarkan severity.
+
+Dipakai oleh:
+- implementer.md ketika perubahan menyentuh auth/security.
+- command review-auth.md melalui agent auth-security-reviewer.
+
+3. .opencode/agents/subagent/code-reviewer.md
+
+Tugas:
+- Mereview kualitas kode, konsistensi arsitektur, maintainability, dan regresi.
+- Fokus pada bug, pelanggaran layered architecture, duplikasi, type safety, error handling, contract mismatch, dan validasi input.
+
+Dipakai oleh:
+- implementer.md untuk perubahan non-trivial.
+- command review-api.md melalui agent code-reviewer.
+
+4. .opencode/agents/subagent/create-task-from-plan.md
+
+Tugas:
+- Membuat task file Markdown dari selected plan.
+- Membaca plan lengkap sebelum membuat task.
+- Menghasilkan task group actionable dengan status marker [ ], [x], dan [!].
+- Menulis task default ke .opencode/docs/task/.
+- Menjaga task tetap sesuai arsitektur project.
+
+Dipakai oleh:
+- tasks.md.
+
+5. .opencode/agents/subagent/prisma-reviewer.md
+
+Tugas:
+- Mereview Prisma schema, seed, SQL schema, repository, dan transaction safety.
+- Fokus pada kompatibilitas Prisma vs SQL, index/unique/relation/cascade, seed deterministik, order transaction, stock decrement, soft delete, dan race condition.
+
+Dipakai oleh:
+- implementer.md ketika perubahan menyentuh database/Prisma/repository/order/stock.
+- command review-prisma.md melalui agent prisma-reviewer.
+
+6. .opencode/agents/subagent/test-reviewer.md
+
+Tugas:
+- Mereview coverage API dan menyusun skenario manual/Postman.
+- Fokus pada login, product CRUD, pagination/search, soft delete, order creation, order listing user-scoped, unauthorized request, validation failure, dan conflict case.
+
+Dipakai oleh:
+- implementer.md ketika perubahan menyentuh kontrak API atau verifikasi endpoint.
+- command test-api.md melalui agent test-reviewer.
+
+Skills
+------
+
+1. .opencode/skills/api-testing/SKILL.md
+
+Tugas:
+- Workflow manual API testing.
+- Menjelaskan setup docker, create tables, seed, dev server, login seeded user, bearer token, dan core scenarios.
+
+Kapan dipakai:
+- Saat testing endpoint secara manual, Postman, atau HTTP client.
+
+2. .opencode/skills/auth-rbac/SKILL.md
+
+Tugas:
+- Workflow auth dan authorization.
+- Menjelaskan login endpoint, JWT helper, request helper, bcryptjs, bearer token, dan checklist auth.
+
+Kapan dipakai:
+- Saat implementasi atau review JWT auth, protected routes, login, authorization, atau user-scoped data.
+
+3. .opencode/skills/ecommerce-order/SKILL.md
+
+Tugas:
+- Workflow order creation, stock decrement, totals, dan order item logic.
+- Menekankan transaction, current product price, duplicate product aggregation, 404 missing product, dan 409 insufficient stock.
+
+Kapan dipakai:
+- Saat perubahan menyentuh order creation, stock, total, dan order listing.
+
+4. .opencode/skills/layered-api/SKILL.md
+
+Tugas:
+- Workflow implementasi/review endpoint API berlapis.
+- Menjelaskan struktur route, service, repository, schema, types, response helper, dan verifikasi.
+
+Kapan dipakai:
+- Saat implementasi atau review endpoint Next.js App Router.
+
+5. .opencode/skills/prisma-database/SKILL.md
+
+Tugas:
+- Workflow database dan Prisma.
+- Menjelaskan schema, seed, SQL, Prisma client, repositories, transaction, stock race condition, dan verifikasi.
+
+Kapan dipakai:
+- Saat perubahan menyentuh Prisma model, seed, SQL create-table, atau repository database logic.
+
+Commands
+--------
+
+1. .opencode/commands/review-api.md
+
+Tugas:
+- Command untuk review API implementation terhadap layered architecture dan endpoint requirements.
+- Mengarahkan ke agent code-reviewer.
+
+Catatan koneksi:
+- code-reviewer.md ada di .opencode/agents/subagent/code-reviewer.md.
+- Kemungkinan terhubung jika Opencode resolve berdasarkan nama agent, tetapi perlu validasi jika tool membutuhkan path eksplisit.
+
+2. .opencode/commands/review-auth.md
+
+Tugas:
+- Command untuk review auth/security.
+- Mengarahkan ke agent auth-security-reviewer.
+
+Catatan koneksi:
+- auth-security-reviewer.md ada di .opencode/agents/subagent/auth-security-reviewer.md.
+- Kemungkinan terhubung jika Opencode resolve berdasarkan nama agent, tetapi perlu validasi jika tool membutuhkan path eksplisit.
+
+3. .opencode/commands/review-prisma.md
+
+Tugas:
+- Command untuk review Prisma schema, SQL schema, seed, dan transaction safety.
+- Mengarahkan ke agent prisma-reviewer.
+
+Catatan koneksi:
+- prisma-reviewer.md ada di .opencode/agents/subagent/prisma-reviewer.md.
+- Kemungkinan terhubung jika Opencode resolve berdasarkan nama agent, tetapi perlu validasi jika tool membutuhkan path eksplisit.
+
+4. .opencode/commands/test-api.md
+
+Tugas:
+- Command untuk membuat API test plan praktis.
+- Mengarahkan ke agent test-reviewer.
+
+Catatan koneksi:
+- test-reviewer.md ada di .opencode/agents/subagent/test-reviewer.md.
+- Kemungkinan terhubung jika Opencode resolve berdasarkan nama agent, tetapi perlu validasi jika tool membutuhkan path eksplisit.
+
+Rules
+-----
+
+1. .opencode/rules/architecture.md
+
+Tugas:
+- Guardrail arsitektur.
+- Menegaskan route handler tipis, business logic di service, Prisma di repository, Zod di schema, dan helper di lib.
+
+2. .opencode/rules/coding-standard.md
+
+Tugas:
+- Guardrail coding standard.
+- Menegaskan TypeScript, fungsi kecil, AppError, success/failure, admin API helper, lint, dan build.
+
+3. .opencode/rules/database.md
+
+Tugas:
+- Guardrail database.
+- Menegaskan kompatibilitas Prisma dan SQL, transaction order/stock, soft delete product, seed, password hash, dan regenerate Prisma client.
+
+4. .opencode/rules/security.md
+
+Tugas:
+- Guardrail security.
+- Menegaskan JWT bearer auth, JWT_SECRET dari env, jangan return password hash, generic login failure, user-owned data filtering, dan validasi request.
+
+Potensi Masalah Yang Ditemukan
+------------------------------
+
+1. Commands mereferensikan agent dengan nama saja.
+
+Detail:
+- review-api.md memakai agent: code-reviewer.
+- review-auth.md memakai agent: auth-security-reviewer.
+- review-prisma.md memakai agent: prisma-reviewer.
+- test-api.md memakai agent: test-reviewer.
+- File agent tersebut berada di .opencode/agents/subagent/.
+
+Dampak:
+- Jika Opencode resolve agent berdasarkan nama file secara recursive, ini aman.
+- Jika Opencode hanya mencari agent di .opencode/agents/ root, command tidak akan menemukan subagent.
+
+Rekomendasi:
+- Jalankan command terkait di Opencode untuk validasi runtime.
+- Jika gagal, pilih salah satu: pindahkan command-target agents ke root, ubah struktur sesuai konvensi Opencode, atau sesuaikan frontmatter command dengan format path yang didukung Opencode.
+
+2. Path folder docs menggunakan task, bukan tasks.
+
+Detail:
+- Struktur yang dibuat adalah .opencode/docs/task/.
+- implementer.md dan tasks.md sudah konsisten memakai .opencode/docs/task/.
+- create-task-from-plan.md juga default ke .opencode/docs/task/.
+
+Dampak:
+- Konsisten di konfigurasi saat ini.
+- Hanya perlu diperhatikan jika ada prompt lama atau agent eksternal yang masih mengharapkan .opencode/docs/tasks/.
+
+3. Tidak ada task entry point default.
+
+Detail:
+- implementer.md default membaca .opencode/docs/task/tasks.md jika user tidak memberi task file.
+- Saat audit ini, folder .opencode/docs/task/ ada tetapi belum ada file tasks.md.
+
+Dampak:
+- Jika user menjalankan implementer tanpa task file atau task spesifik, agent akan perlu bertanya klarifikasi.
+
+Rekomendasi:
+- Buat .opencode/docs/task/tasks.md jika ingin ada backlog default.
+
+Kesimpulan
+----------
+
+- Agent utama, subagent, skills, commands, rules, dan docs sudah tersusun dan secara konsep saling terhubung.
+- Koneksi internal paling penting sudah konsisten: tasks -> create-task-from-plan, implementer -> review subagents, implementer/tasks -> docs folder, semua primary -> AGENTS.md.
+- Area yang perlu divalidasi runtime adalah command frontmatter agent yang mereferensikan subagent berdasarkan nama file, karena tergantung cara Opencode resolve agent di subfolder.
+- Belum ada .opencode/docs/task/tasks.md sebagai backlog default untuk implementer.
