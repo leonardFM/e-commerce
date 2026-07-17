@@ -4,7 +4,7 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: 'Solutech Commerce',
-  description: 'Next.js App Router starter',
+  description: 'Solutech Commerce admin and API',
 }
 
 export default function RootLayout({
