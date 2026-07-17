@@ -4,6 +4,7 @@ export type AuthResponse = {
     id: number
     email: string
     name: string | null
+    role: 'ADMIN' | 'CUSTOMER'
   }
 }
 

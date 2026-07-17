@@ -11,7 +11,7 @@ export async function login(input: LoginInput) {
   const isValid = await bcrypt.compare(input.password, user.passwordHash)
   if (!isValid) throw new AppError('Invalid credentials', 401)
 
-  const token = await signJwt({ userId: user.id, email: user.email })
+  const token = await signJwt({ userId: user.id, email: user.email, role: user.role })
 
   return {
     token,
@@ -19,6 +19,7 @@ export async function login(input: LoginInput) {
       id: user.id,
       email: user.email,
       name: user.name,
+      role: user.role,
     },
   }
 }

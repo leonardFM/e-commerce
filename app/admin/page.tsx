@@ -54,6 +54,11 @@ export default function AdminPage() {
         setTotalPages(result.meta.totalPages)
         setTotalProducts(result.meta.total)
       } catch (err) {
+        if (err instanceof Error && (err.message === 'Unauthorized' || err.message === 'Forbidden')) {
+          window.localStorage.removeItem('admin-token')
+          setToken('')
+          setProducts([])
+        }
         setError(err instanceof Error ? err.message : 'Failed to load products')
       }
     }, 200)
@@ -69,6 +74,10 @@ export default function AdminPage() {
 
     try {
       const result = await loginAdmin(email, password)
+      if (result.user.role !== 'ADMIN') {
+        throw new Error('Only admin users can access this dashboard')
+      }
+
       setToken(result.token)
       window.localStorage.setItem('admin-token', result.token)
       setMessage(`Signed in as ${result.user.email}`)

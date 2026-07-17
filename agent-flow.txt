@@ -1,0 +1,279 @@
+Primary Agents
+==============
+
+Di project ini ada 2 primary agent:
+
+- .opencode/agents/tasks.md
+- .opencode/agents/implementer.md
+
+Primary agent adalah agent utama yang dipilih untuk menjalankan alur kerja besar. Ia bukan reviewer kecil, tapi koordinator utama untuk satu jenis pekerjaan.
+
+1. Agent tasks
+--------------
+
+Path:
+
+.opencode/agents/tasks.md
+
+Fungsi utama:
+
+Membuat task file dari plan.
+
+Agent ini dipakai kalau kamu punya dokumen plan di:
+
+.opencode/docs/plan/
+
+Lalu ingin mengubah plan itu menjadi backlog task yang bisa dikerjakan oleh agent implementer.
+
+Alur kerjanya:
+
+1. User memberikan plan.
+
+Contoh:
+
+buatkan task dari .opencode/docs/plan/product-api-plan.md
+
+Atau:
+
+buatkan task dari plan Product API
+
+2. Agent tasks membaca AGENTS.md.
+
+Ini memastikan agent mengikuti aturan project: arsitektur, keamanan, style code, Prisma rules, dan sebagainya.
+
+3. Agent mencari plan.
+
+Jika user memberi path file, agent langsung baca file itu.
+
+Jika user memberi judul, agent mencari plan yang cocok di:
+
+.opencode/docs/plan/
+
+Jika ada lebih dari satu plan yang cocok, agent akan bertanya dulu.
+
+Jika user tidak memberi plan, agent akan bertanya klarifikasi.
+
+4. Agent mendelegasikan pembuatan task.
+
+Agent tasks tidak membuat task langsung, kecuali subagent tidak tersedia.
+
+Ia mendelegasikan ke:
+
+.opencode/agents/subagent/create-task-from-plan.md
+
+5. Subagent membuat task file.
+
+Output default masuk ke:
+
+.opencode/docs/task/
+
+Format task menggunakan status:
+
+[ ] pending
+
+[x] selesai
+
+[!] blocked
+
+6. Agent tasks melaporkan hasil.
+
+Final response berisi:
+
+- task file yang dibuat
+- source plan yang dipakai
+- nama file berasal dari apa
+- asumsi atau bagian ambigu yang dilewati
+
+2. Agent implementer
+--------------------
+
+Path:
+
+.opencode/agents/implementer.md
+
+Fungsi utama:
+
+Mengimplementasikan task yang dipilih dari task backlog.
+
+Agent ini dipakai kalau kamu sudah punya task file di:
+
+.opencode/docs/task/
+
+Misalnya:
+
+.opencode/docs/task/tasks.md
+
+Atau task hasil generate dari agent tasks.
+
+Alur kerjanya:
+
+1. User memilih task.
+
+Contoh:
+
+implementasikan task Products nomor 1
+
+Atau:
+
+kerjakan .opencode/docs/task/tasks.md bagian Orders
+
+2. Agent membaca AGENTS.md.
+
+Ini wajib. AGENTS.md adalah aturan repo utama.
+
+3. Agent menentukan active backlog.
+
+Jika user memberi file task, agent pakai file itu.
+
+Jika user tidak memberi file, agent default membaca:
+
+.opencode/docs/task/tasks.md
+
+File ini sekarang sudah dibuat sebagai backlog default project.
+
+4. Agent membaca task terpilih.
+
+Agent membaca task yang dipilih user.
+
+Jika task mereferensikan plan, agent membaca plan di:
+
+.opencode/docs/plan/
+
+Jika task punya catatan implementasi, agent membaca:
+
+.opencode/docs/implement/
+
+5. Agent membaca file kode terkait.
+
+Sebelum edit, agent harus membaca file yang relevan.
+
+Untuk endpoint API, biasanya:
+
+- app/api/**/route.ts
+- modules/<domain>/*.schema.ts
+- modules/<domain>/*.service.ts
+- modules/<domain>/*.repository.ts
+- modules/<domain>/*.types.ts
+- lib/*
+- prisma/schema.prisma jika terkait database
+
+6. Agent mengimplementasikan perubahan.
+
+Agent harus mengikuti aturan project:
+
+- route handler hanya untuk HTTP concern
+- validasi di schema Zod
+- business logic di service
+- Prisma query di repository
+- protected endpoint memakai requireUser(request)
+- response sukses memakai success()
+- error memakai failure() dan AppError
+- product aktif harus memperhatikan deletedAt: null
+- order creation harus transaction-safe
+
+7. Agent memanggil subagent reviewer bila perlu.
+
+Jika perubahan menyentuh area tertentu, implementer memicu reviewer.
+
+Contoh:
+
+Jika ubah auth:
+
+.opencode/agents/subagent/auth-security-reviewer.md
+
+Jika ubah Prisma/database:
+
+.opencode/agents/subagent/prisma-reviewer.md
+
+Jika ubah endpoint API:
+
+.opencode/agents/subagent/api-implementer.md
+
+Jika perubahan cukup besar:
+
+.opencode/agents/subagent/code-reviewer.md
+
+Jika perlu skenario testing:
+
+.opencode/agents/subagent/test-reviewer.md
+
+8. Agent menjalankan verifikasi.
+
+Minimal untuk TypeScript/API:
+
+npm run lint
+
+Jika build-sensitive:
+
+npm run build
+
+Jika Prisma schema berubah:
+
+npm run prisma:generate
+
+Jika endpoint berubah dan server/database tersedia, bisa manual API testing.
+
+9. Agent update task backlog.
+
+Jika task selesai dan sudah diverifikasi, marker bisa diubah:
+
+[ ] menjadi [x]
+
+Jika blocked:
+
+[!]
+
+10. Agent memberi final response dalam Bahasa Indonesia.
+
+Format final response implementer berisi:
+
+- summary task yang dikerjakan
+- files changed
+- dampak API response contract
+- dampak database/Prisma
+- hasil verification command
+- remaining tasks atau blockers
+
+Hubungan Antar Primary Agent
+----------------------------
+
+Alur idealnya seperti ini:
+
+Plan dibuat
+  ↓
+tasks primary agent
+  ↓
+create-task-from-plan subagent
+  ↓
+Task file masuk ke .opencode/docs/task/
+  ↓
+implementer primary agent
+  ↓
+Kode diimplementasikan
+  ↓
+review subagents jika perlu
+  ↓
+verifikasi
+  ↓
+task backlog diupdate
+
+Contoh Penggunaan
+-----------------
+
+Membuat task dari plan:
+
+Gunakan agent tasks untuk membuat task dari .opencode/docs/plan/order-flow.md
+
+Mengimplementasikan task tertentu:
+
+Gunakan agent implementer untuk mengerjakan .opencode/docs/task/tasks.md bagian Orders
+
+Mengimplementasikan task default:
+
+Gunakan agent implementer untuk mengerjakan task Products pertama
+
+Karena backlog default sudah ada di:
+
+.opencode/docs/task/tasks.md
+
+agent implementer bisa langsung mencari task dari sana kalau kamu tidak memberi file lain.

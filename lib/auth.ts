@@ -12,10 +12,11 @@ function getJwtSecret() {
 export type JwtUser = {
   userId: number
   email: string
+  role: 'ADMIN' | 'CUSTOMER'
 }
 
 export async function signJwt(user: JwtUser) {
-  return new SignJWT({ email: user.email })
+  return new SignJWT({ email: user.email, role: user.role })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(String(user.userId))
     .setIssuedAt()
@@ -26,12 +27,15 @@ export async function signJwt(user: JwtUser) {
 export async function verifyJwt(token: string) {
   const { payload } = await jwtVerify(token, getJwtSecret())
   const userId = payload.sub ? Number(payload.sub) : NaN
+  const role = payload.role
 
   if (!userId || Number.isNaN(userId)) throw new AppError('Invalid token', 401)
+  if (role !== 'ADMIN' && role !== 'CUSTOMER') throw new AppError('Invalid token', 401)
 
   return {
     userId,
     email: String(payload.email ?? ''),
+    role,
   }
 }
 
