@@ -4,7 +4,7 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: 'Solutech Commerce',
-  description: 'Solutech Commerce admin and API',
+  description: 'Professional ecommerce storefront and admin dashboard',
 }
 
 export default function RootLayout({
