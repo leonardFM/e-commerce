@@ -8,6 +8,8 @@ type CheckoutCartResult = OrderRecord & {
   affectedProductIds: number[]
 }
 
+const insufficientStockMessage = 'Insufficient stock for one or more products'
+
 export async function validateCheckoutCart(userId: number) {
   const cart = await prisma.cart.findUnique({
     where: { userId },
@@ -24,7 +26,7 @@ export async function validateCheckoutCart(userId: number) {
 
   for (const item of cart.items) {
     if (item.product.deletedAt) throw new AppError('One or more products not found', 404)
-    if (item.product.stock < item.quantity) throw new AppError(`Insufficient stock for product ${item.product.name}`, 409)
+    if (item.product.stock < item.quantity) throw new AppError(insufficientStockMessage, 409)
   }
 }
 
@@ -47,7 +49,7 @@ export async function checkoutCart(userId: number, input: CheckoutInput, payment
 
     for (const item of cart.items) {
       if (item.product.deletedAt) throw new AppError('One or more products not found', 404)
-      if (item.product.stock < item.quantity) throw new AppError(`Insufficient stock for product ${item.product.name}`, 409)
+      if (item.product.stock < item.quantity) throw new AppError(insufficientStockMessage, 409)
     }
 
     const subtotal = cart.items.reduce((sum, item) => sum + item.product.price * item.quantity, 0)
@@ -68,7 +70,7 @@ export async function checkoutCart(userId: number, input: CheckoutInput, payment
         },
       })
 
-      if (result.count !== 1) throw new AppError(`Insufficient stock for product ${item.product.name}`, 409)
+      if (result.count !== 1) throw new AppError(insufficientStockMessage, 409)
       stockSnapshots.set(item.productId, { before: stockBefore, after: stockAfter })
     }
 

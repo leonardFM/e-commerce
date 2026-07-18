@@ -1,4 +1,5 @@
 import { AppError } from './errors'
+import { logHash, logger } from './logger'
 import { getRedis } from './redis'
 
 type FailedLoginRateLimitOptions = {
@@ -18,6 +19,7 @@ export async function assertFailedLoginRateLimit(options: FailedLoginRateLimitOp
     }
   } catch (error) {
     if (error instanceof AppError) throw error
+    logger.warn({ err: error, keyHash: logHash(options.key) }, 'rate_limit_check_failed')
     return
   }
 }
@@ -29,7 +31,8 @@ export async function incrementFailedLoginRateLimit(options: FailedLoginRateLimi
   try {
     const attempts = await redis.incr(options.key)
     if (attempts === 1) await redis.expire(options.key, options.windowSeconds)
-  } catch {
+  } catch (error) {
+    logger.warn({ err: error, keyHash: logHash(options.key) }, 'rate_limit_increment_failed')
     return
   }
 }
@@ -40,7 +43,8 @@ export async function resetFailedLoginRateLimit(key: string) {
 
   try {
     await redis.del(key)
-  } catch {
+  } catch (error) {
+    logger.warn({ err: error, keyHash: logHash(key) }, 'rate_limit_reset_failed')
     return
   }
 }

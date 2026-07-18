@@ -5,11 +5,13 @@ import { listInventoryMovementsQuerySchema } from '@/modules/inventory/inventory
 import { listInventoryMovementsService } from '@/modules/inventory/inventory.service'
 
 export async function GET(request: NextRequest) {
+  let userId: number | undefined
   try {
-    await requireRole(request, 'ADMIN')
+    const user = await requireRole(request, 'ADMIN')
+    userId = user.userId
     const query = listInventoryMovementsQuerySchema.parse(Object.fromEntries(request.nextUrl.searchParams))
     return success(await listInventoryMovementsService(query))
   } catch (error) {
-    return failure(error)
+    return failure(error, { feature: 'inventory_movements', method: request.method, path: request.nextUrl.pathname, userId })
   }
 }

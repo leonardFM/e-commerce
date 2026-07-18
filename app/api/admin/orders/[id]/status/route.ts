@@ -12,12 +12,14 @@ function parseId(value: string) {
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  let userId: number | undefined
   try {
-    await requireRole(request, 'ADMIN')
+    const user = await requireRole(request, 'ADMIN')
+    userId = user.userId
     const { id } = await params
     const body = updateOrderStatusSchema.parse(await request.json())
     return success(await updateOrderStatusService(parseId(id), body.status))
   } catch (error) {
-    return failure(error)
+    return failure(error, { feature: 'admin_orders_status', method: request.method, path: request.nextUrl.pathname, userId })
   }
 }

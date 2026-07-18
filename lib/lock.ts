@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto'
+import { logHash, logger } from './logger'
 import { getRedis } from './redis'
 
 export type RedisLock = {
@@ -15,7 +16,8 @@ export async function acquireRedisLock(key: string, ttlSeconds: number) {
   try {
     const result = await redis.set(key, token, 'EX', ttlSeconds, 'NX')
     return result === 'OK' ? { key, token } : false
-  } catch {
+  } catch (error) {
+    logger.warn({ err: error, keyHash: logHash(key) }, 'redis_lock_acquire_failed')
     return null
   }
 }
@@ -29,7 +31,8 @@ export async function releaseRedisLock(lock: RedisLock | null | false) {
   try {
     const token = await redis.get(lock.key)
     if (token === lock.token) await redis.del(lock.key)
-  } catch {
+  } catch (error) {
+    logger.warn({ err: error, keyHash: logHash(lock.key) }, 'redis_lock_release_failed')
     return
   }
 }

@@ -125,13 +125,15 @@ describe('checkout integration', () => {
     })
     await testPrisma.product.update({ where: { id: 1 }, data: { stock: 0 } })
 
-    const { response } = await callRoute<{ error: string }>(checkoutRoute, '/api/checkout', {
+    const { response, payload } = await callRoute<{ error: string }>(checkoutRoute, '/api/checkout', {
       method: 'POST',
       token: customer.token,
       body: { paymentMethod: 'EWALLET', ...shipping },
     })
 
     expect(response.status).toBe(409)
+    expect(payload.error).toBe('Insufficient stock for one or more products')
+    expect(payload.error).not.toContain('Integration Mouse')
     expect(await testPrisma.order.count()).toBe(0)
     expect(await testPrisma.inventoryMovement.count()).toBe(0)
     expect((await testPrisma.product.findUniqueOrThrow({ where: { id: 1 } })).stock).toBe(0)
@@ -160,5 +162,12 @@ describe('checkout integration', () => {
       body: { paymentMethod: 'CARD', ...shipping },
     })
     expect(invalidPaymentMethod.response.status).toBe(400)
+
+    const longShippingAddress = await callRoute<{ error: string }>(checkoutRoute, '/api/checkout', {
+      method: 'POST',
+      token: customer.token,
+      body: { paymentMethod: 'EWALLET', ...shipping, shippingAddress: 'a'.repeat(501) },
+    })
+    expect(longShippingAddress.response.status).toBe(400)
   })
 })

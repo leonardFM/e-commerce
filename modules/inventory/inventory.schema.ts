@@ -10,5 +10,5 @@ export const listInventoryMovementsQuerySchema = z.object({
 export const inventoryAdjustmentSchema = z.object({
   productId: z.number().int().positive(),
   quantityChange: z.number().int().refine((value) => value !== 0, 'Quantity change cannot be zero'),
-  note: z.string().max(500).optional(),
+  note: z.string().trim().max(500).optional(),
 })

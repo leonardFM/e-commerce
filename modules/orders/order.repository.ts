@@ -2,6 +2,8 @@ import { prisma } from '@/lib/prisma'
 import { AppError } from '@/lib/errors'
 import type { CreateOrderInput, ListOrdersQuery, OrderRecord } from './order.types'
 
+const insufficientStockMessage = 'Insufficient stock for one or more products'
+
 export function toOrderRecord(order: {
   id: number
   userId: number
@@ -84,17 +86,21 @@ export async function createOrder(userId: number, input: CreateOrderInput) {
     for (const item of groupedItems) {
       const product = productMap.get(item.productId)
       if (!product) throw new AppError('One or more products not found', 404)
-      if (product.stock < item.quantity) throw new AppError(`Insufficient stock for product ${product.name}`, 409)
+      if (product.stock < item.quantity) throw new AppError(insufficientStockMessage, 409)
     }
 
+    const stockSnapshots = new Map<number, { before: number; after: number }>()
+
     for (const item of groupedItems) {
+      const product = productMap.get(item.productId)
+      if (!product) throw new AppError('One or more products not found', 404)
+      const stockBefore = product.stock
+      const stockAfter = stockBefore - item.quantity
       const result = await tx.product.updateMany({
         where: {
           id: item.productId,
           deletedAt: null,
-          stock: {
-            gte: item.quantity,
-          },
+          stock: stockBefore,
         },
         data: {
           stock: {
@@ -104,9 +110,10 @@ export async function createOrder(userId: number, input: CreateOrderInput) {
       })
 
       if (result.count !== 1) {
-        const product = productMap.get(item.productId)
-        throw new AppError(`Insufficient stock for product ${product?.name ?? item.productId}`, 409)
+        throw new AppError(insufficientStockMessage, 409)
       }
+
+      stockSnapshots.set(item.productId, { before: stockBefore, after: stockAfter })
     }
 
     const total = groupedItems.reduce((sum, item) => {
@@ -149,6 +156,24 @@ export async function createOrder(userId: number, input: CreateOrderInput) {
           },
         },
       },
+    })
+
+    await tx.inventoryMovement.createMany({
+      data: groupedItems.map((item) => {
+        const snapshot = stockSnapshots.get(item.productId)
+        if (!snapshot) throw new AppError('Stock snapshot not found', 500)
+
+        return {
+          productId: item.productId,
+          userId,
+          orderId: order.id,
+          type: 'ORDER_CHECKOUT',
+          quantityChange: -item.quantity,
+          stockBefore: snapshot.before,
+          stockAfter: snapshot.after,
+          note: `Order #${order.id}`,
+        }
+      }),
     })
 
     return toOrderRecord(order)
