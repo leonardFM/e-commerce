@@ -1,7 +1,12 @@
 import { prisma } from '@/lib/prisma'
 import { AppError } from '@/lib/errors'
 import { toOrderRecord } from '@/modules/orders/order.repository'
+import type { OrderRecord } from '@/modules/orders/order.types'
 import type { CheckoutInput } from './checkout.types'
+
+type CheckoutCartResult = OrderRecord & {
+  affectedProductIds: number[]
+}
 
 export async function validateCheckoutCart(userId: number) {
   const cart = await prisma.cart.findUnique({
@@ -23,8 +28,10 @@ export async function validateCheckoutCart(userId: number) {
   }
 }
 
-export async function checkoutCart(userId: number, input: CheckoutInput, payment: { paymentStatus: 'PAID' | 'PENDING'; paymentReference: string }) {
+export async function checkoutCart(userId: number, input: CheckoutInput, payment: { paymentStatus: 'PAID' | 'PENDING'; paymentReference: string }): Promise<CheckoutCartResult> {
   return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(${userId})`
+
     const cart = await tx.cart.findUnique({
       where: { userId },
       include: {
@@ -54,7 +61,7 @@ export async function checkoutCart(userId: number, input: CheckoutInput, payment
         where: {
           id: item.productId,
           deletedAt: null,
-          stock: item.product.stock,
+          stock: { gte: item.quantity },
         },
         data: {
           stock: { decrement: item.quantity },
@@ -115,6 +122,9 @@ export async function checkoutCart(userId: number, input: CheckoutInput, payment
 
     await tx.cartItem.deleteMany({ where: { cartId: cart.id } })
 
-    return toOrderRecord(order)
+    return {
+      ...toOrderRecord(order),
+      affectedProductIds: cart.items.map((item) => item.productId),
+    }
   })
 }

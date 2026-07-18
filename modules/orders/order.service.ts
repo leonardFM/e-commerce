@@ -1,10 +1,13 @@
 import { AppError } from '@/lib/errors'
+import { invalidateProductCaches } from '@/modules/products/product.cache'
 import { createOrder, findOrderById, findOrderByUser, findOrdersByUser, listOrdersForAdmin, updateOrderPayment, updateOrderStatus } from './order.repository'
 import type { CreateOrderInput, ListOrdersQuery, OrderStatus, PaymentStatus } from './order.types'
 
 export async function createOrderService(userId: number, input: CreateOrderInput) {
   try {
-    return await createOrder(userId, input)
+    const order = await createOrder(userId, input)
+    await Promise.all(order.items.map((item) => invalidateProductCaches(item.productId)))
+    return order
   } catch (error) {
     if (error instanceof AppError) throw error
     const message = error instanceof Error ? error.message : 'Failed to create order'

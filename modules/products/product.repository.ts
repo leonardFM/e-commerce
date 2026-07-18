@@ -58,6 +58,16 @@ export async function listProducts(query: ListProductsQuery): Promise<ProductLis
   }
 }
 
+export async function listFeaturedProducts(limit = 8) {
+  const products = await prisma.product.findMany({
+    where: { deletedAt: null },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+  })
+
+  return products.map(toProductRecord)
+}
+
 export async function updateProduct(id: number, data: UpdateProductInput) {
   const product = await prisma.product.update({
     where: { id },
