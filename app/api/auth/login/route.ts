@@ -8,6 +8,6 @@ export async function POST(request: NextRequest) {
     const body = loginSchema.parse(await request.json())
     return success(await login(body))
   } catch (error) {
-    return failure(error)
+    return failure(error, { feature: 'auth_login', method: request.method, path: request.nextUrl.pathname })
   }
 }

@@ -1,4 +1,6 @@
 .next
 node_modules
 *.log
+*.jsonl
+logs/
 .env

@@ -5,11 +5,13 @@ import { listOrdersQuerySchema } from '@/modules/orders/order.schema'
 import { listAdminOrdersService } from '@/modules/orders/order.service'
 
 export async function GET(request: NextRequest) {
+  let userId: number | undefined
   try {
-    await requireRole(request, 'ADMIN')
+    const user = await requireRole(request, 'ADMIN')
+    userId = user.userId
     const query = listOrdersQuerySchema.parse(Object.fromEntries(request.nextUrl.searchParams))
     return success(await listAdminOrdersService(query))
   } catch (error) {
-    return failure(error)
+    return failure(error, { feature: 'admin_orders', method: request.method, path: request.nextUrl.pathname, userId })
   }
 }

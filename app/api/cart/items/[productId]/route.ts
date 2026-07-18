@@ -12,22 +12,26 @@ function parseProductId(value: string) {
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ productId: string }> }) {
+  let userId: number | undefined
   try {
     const user = await requireUser(request)
+    userId = user.userId
     const { productId } = await params
     const body = updateCartItemSchema.parse(await request.json())
     return success(await updateCartItemService(user.userId, parseProductId(productId), body))
   } catch (error) {
-    return failure(error)
+    return failure(error, { feature: 'cart_items', method: request.method, path: request.nextUrl.pathname, userId })
   }
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ productId: string }> }) {
+  let userId: number | undefined
   try {
     const user = await requireUser(request)
+    userId = user.userId
     const { productId } = await params
     return success(await removeCartItemService(user.userId, parseProductId(productId)))
   } catch (error) {
-    return failure(error)
+    return failure(error, { feature: 'cart_items', method: request.method, path: request.nextUrl.pathname, userId })
   }
 }

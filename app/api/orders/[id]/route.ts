@@ -11,11 +11,13 @@ function parseId(value: string) {
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  let userId: number | undefined
   try {
     const user = await requireUser(request)
+    userId = user.userId
     const { id } = await params
     return success(await getOrderService(user.userId, parseId(id)))
   } catch (error) {
-    return failure(error)
+    return failure(error, { feature: 'orders', method: request.method, path: request.nextUrl.pathname, userId })
   }
 }

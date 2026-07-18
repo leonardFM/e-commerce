@@ -102,5 +102,12 @@ describe('inventory integration', () => {
       body: { productId: 1, quantityChange: 0 },
     })
     expect(zero.response.status).toBe(400)
+
+    const longNote = await callRoute<{ error: string }>(adjustmentRoute, '/api/inventory/adjustments', {
+      method: 'POST',
+      token: admin.token,
+      body: { productId: 1, quantityChange: 1, note: 'a'.repeat(501) },
+    })
+    expect(longNote.response.status).toBe(400)
   })
 })

@@ -112,4 +112,38 @@ describe('products integration', () => {
     })
     expect(negativeStock.response.status).toBe(400)
   })
+
+  it('hardens product input and search against oversized and injection-like payloads', async () => {
+    const admin = await loginAsAdmin()
+    const customer = await loginAsCustomer()
+
+    const longName = await callRoute(createProductRoute, '/api/products', {
+      method: 'POST',
+      token: admin.token,
+      body: { name: 'a'.repeat(121), price: 1000, stock: 1 },
+    })
+    expect(longName.response.status).toBe(400)
+
+    const xssName = '<img src=x onerror=alert(1)>'
+    const xssProduct = await callRoute<{ data: { name: string } }>(createProductRoute, '/api/products', {
+      method: 'POST',
+      token: admin.token,
+      body: { name: xssName, description: '<script>alert(1)</script>', price: 1000, stock: 1 },
+    })
+    expect(xssProduct.response.status).toBe(201)
+    expect(xssProduct.payload.data.name).toBe(xssName)
+
+    const longSearch = await callRoute(listProductsRoute, '/api/products', {
+      token: customer.token,
+      searchParams: { search: 'a'.repeat(121) },
+    })
+    expect(longSearch.response.status).toBe(400)
+
+    const sqlLikeSearch = await callRoute<{ data: { items: Array<{ name: string }> } }>(listProductsRoute, '/api/products', {
+      token: customer.token,
+      searchParams: { search: "' OR 1=1 --" },
+    })
+    expect(sqlLikeSearch.response.status).toBe(200)
+    expect(sqlLikeSearch.payload.data.items).toEqual([])
+  })
 })

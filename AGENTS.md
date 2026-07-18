@@ -31,8 +31,13 @@ Panduan untuk agent yang bekerja di repo ini.
 - `DATABASE_URL` wajib untuk Prisma/PostgreSQL.
 - `JWT_SECRET` wajib untuk sign dan verify token.
 - `REDIS_URL` opsional untuk cache, rate limit, dan lock Redis; jika tidak diisi, helper Redis/cache harus fail-open dan aplikasi tetap berjalan tanpa Redis.
+- `LOG_LEVEL` opsional untuk mengatur level structured logger Pino; default `debug` di development dan `info` di environment lain.
+- `LOG_DESTINATION` opsional untuk tujuan log Pino; nilai yang didukung minimal `stdout` dan `file`. Gunakan `file` untuk demo/local file logging, dan `stdout` untuk production cloud/container.
+- `LOG_FILE_PATH` opsional untuk path file log saat `LOG_DESTINATION=file`; default `logs/app.jsonl`.
+- `SLOW_QUERY_THRESHOLD_MS` opsional untuk threshold warning query Prisma lambat; default `100` ms.
+- `SLOW_CACHE_THRESHOLD_MS` opsional untuk threshold warning operasi cache lambat; default `50` ms.
 - Untuk automated integration test, gunakan PostgreSQL database terpisah seperti `solutech_test`; jangan gunakan database development untuk test yang menjalankan cleanup data.
-- Jangan commit `.env`, secret, token, atau data kredensial lain.
+- Jangan commit `.env`, secret, token, file dalam `logs/`, atau data kredensial lain.
 
 ## Architecture Rules
 
@@ -44,6 +49,12 @@ Panduan untuk agent yang bekerja di repo ini.
 - Gunakan import alias `@/*` sesuai `tsconfig.json`.
 - Response sukses gunakan `success()` dari `lib/response.ts`.
 - Error response gunakan `failure()` dan `AppError` untuk status HTTP yang disengaja.
+- Application logging gunakan `logger` dari `lib/logger.ts`; hindari `console.log` langsung di app code.
+- Saat `LOG_DESTINATION=file`, logger menulis JSON Lines ke `LOG_FILE_PATH` dan tidak mengirim app logs ke stdout/stderr.
+- File logging lokal bisa membesar tanpa batas; jika file mode dipakai di VPS/single-instance production, wajib siapkan log rotation eksternal.
+- Query performance dan cache performance logs harus memakai structured logger Pino.
+- Jangan log raw SQL params, raw cache key, raw Redis key, raw email, payment reference, shipping phone, atau shipping address.
+- Jangan log password, JWT token, authorization header, secret, atau data sensitif lain.
 
 ## Docs Workflow
 
@@ -64,6 +75,10 @@ Panduan untuk agent yang bekerja di repo ini.
 - Jangan menaruh secret langsung di source code.
 - Untuk data user-scoped, selalu filter berdasarkan `user.userId` dari token, bukan dari body request.
 - Endpoint login ada di `POST /api/auth/login`.
+- Input string publik/admin harus dinormalisasi dengan Zod (`trim()` dan batas `max()` yang sesuai domain) untuk mengurangi risiko payload besar dan reflected/stored XSS.
+- Jangan render HTML dari input user/admin. UI harus tetap memakai JSX text interpolation, bukan `dangerouslySetInnerHTML`, kecuali ada sanitizer/allowlist khusus.
+- Pesan error API tidak boleh memantulkan data user/admin-generated seperti nama produk; gunakan pesan generik untuk konflik stok atau validasi bisnis.
+- Security headers baseline dikonfigurasi di `next.config.mjs`: `X-Content-Type-Options`, `Referrer-Policy`, dan `X-Frame-Options`. CSP belum diaktifkan dan harus diuji build/browser sebelum ditambahkan.
 
 ## Database And Prisma
 

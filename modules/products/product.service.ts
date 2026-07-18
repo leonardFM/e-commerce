@@ -1,4 +1,5 @@
 import { AppError } from '@/lib/errors'
+import { logHash, logger } from '@/lib/logger'
 import { getJsonCache, setJsonCache } from '@/lib/cache'
 import { createProduct, findProductById, listFeaturedProducts, listProducts, softDeleteProduct, updateProduct } from './product.repository'
 import {
@@ -17,13 +18,18 @@ import type { CreateProductInput, ListProductsQuery, UpdateProductInput } from '
 export async function createProductService(input: CreateProductInput) {
   const product = await createProduct(input)
   await invalidateProductCaches(product.id)
+  logger.info({ productId: product.id }, 'product_created')
   return product
 }
 
 export async function listProductsService(query: ListProductsQuery) {
   const cacheKey = productListCacheKey(query)
   const cached = await getJsonCache<ReturnType<typeof toCachedProductList>>(cacheKey)
-  if (cached) return fromCachedProductList(cached)
+  if (cached) {
+    logger.debug({ keyHash: logHash(cacheKey) }, 'product_cache_hit')
+    return fromCachedProductList(cached)
+  }
+  logger.debug({ keyHash: logHash(cacheKey) }, 'product_cache_miss')
 
   const products = await listProducts(query)
   await setJsonCache(cacheKey, toCachedProductList(products), PRODUCT_CACHE_TTL_SECONDS)
@@ -33,6 +39,8 @@ export async function listProductsService(query: ListProductsQuery) {
 export async function getProductService(id: number) {
   const cacheKey = productDetailCacheKey(id)
   const cached = await getJsonCache<ReturnType<typeof toCachedProductRecord>>(cacheKey)
+  if (cached) logger.debug({ productId: id, keyHash: logHash(cacheKey) }, 'product_cache_hit')
+  else logger.debug({ productId: id, keyHash: logHash(cacheKey) }, 'product_cache_miss')
   const product = cached ? fromCachedProductRecord(cached) : await findProductById(id)
   if (!product) throw new AppError('Product not found', 404)
   if (!cached) await setJsonCache(cacheKey, toCachedProductRecord(product), PRODUCT_CACHE_TTL_SECONDS)
@@ -52,6 +60,7 @@ export async function updateProductService(id: number, input: UpdateProductInput
   await getProductService(id)
   const product = await updateProduct(id, input)
   await invalidateProductCaches(id)
+  logger.info({ productId: id }, 'product_updated')
   return product
 }
 
@@ -60,5 +69,6 @@ export async function deleteProductService(id: number) {
   if (product.deletedAt) throw new AppError('Product not found', 404)
   const deletedProduct = await softDeleteProduct(id)
   await invalidateProductCaches(id)
+  logger.info({ productId: id }, 'product_deleted')
   return deletedProduct
 }
