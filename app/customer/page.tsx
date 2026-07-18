@@ -1,5 +1,6 @@
 "use client"
 
+import Link from 'next/link'
 import type { FormEvent } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import {
@@ -25,7 +26,8 @@ function formatMoney(value: number) {
 }
 
 export default function CustomerPage() {
-  const [token, setToken] = useState(() => (typeof window === 'undefined' ? '' : window.localStorage.getItem('customer-token') ?? ''))
+  const [token, setToken] = useState('')
+  const [mounted, setMounted] = useState(false)
   const [email, setEmail] = useState('customer@solutech.test')
   const [password, setPassword] = useState('password123')
   const [products, setProducts] = useState<CustomerProduct[]>([])
@@ -50,6 +52,25 @@ export default function CustomerPage() {
 
   const cartTotal = cart?.total ?? 0
   const cartCount = useMemo(() => cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0, [cart])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const savedToken = window.localStorage.getItem('customer-token') ?? ''
+      const savedRole = window.localStorage.getItem('customer-role') ?? ''
+      const savedEmail = window.localStorage.getItem('customer-email') ?? ''
+      if (savedToken && savedRole !== 'CUSTOMER') {
+        window.localStorage.removeItem('customer-token')
+        window.localStorage.removeItem('customer-role')
+        window.localStorage.removeItem('customer-email')
+      } else {
+        setToken(savedToken)
+        if (savedEmail) setEmail(savedEmail)
+      }
+      setMounted(true)
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [])
 
   useEffect(() => {
     if (!token) return
@@ -95,6 +116,8 @@ export default function CustomerPage() {
 
       setToken(result.token)
       window.localStorage.setItem('customer-token', result.token)
+      window.localStorage.setItem('customer-role', result.user.role)
+      window.localStorage.setItem('customer-email', result.user.email)
       setMessage(`Signed in as ${result.user.email}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
@@ -105,6 +128,8 @@ export default function CustomerPage() {
 
   function logout() {
     window.localStorage.removeItem('customer-token')
+    window.localStorage.removeItem('customer-role')
+    window.localStorage.removeItem('customer-email')
     setToken('')
     setProducts([])
     setOrders([])
@@ -116,13 +141,23 @@ export default function CustomerPage() {
     if (product.stock <= 0) return
     if (!token) return
     setError('')
-    setCart(await addCustomerCartItem(token, product.id, 1))
+    try {
+      setCart(await addCustomerCartItem(token, product.id, 1))
+    } catch (err) {
+      if (err instanceof Error && (err.message === 'Unauthorized' || err.message === 'Forbidden')) logout()
+      setError(err instanceof Error ? err.message : 'Failed to add item to cart')
+    }
   }
 
   async function updateQuantity(productId: number, quantity: number) {
     if (!token) return
     setError('')
-    setCart(await updateCustomerCartItem(token, productId, quantity))
+    try {
+      setCart(await updateCustomerCartItem(token, productId, quantity))
+    } catch (err) {
+      if (err instanceof Error && (err.message === 'Unauthorized' || err.message === 'Forbidden')) logout()
+      setError(err instanceof Error ? err.message : 'Failed to update cart item')
+    }
   }
 
   async function checkout() {
@@ -144,6 +179,7 @@ export default function CustomerPage() {
       setCart(cartResult)
       setMessage(`Checkout berhasil. Order #${result.order.id} (${result.payment.paymentStatus}) sudah masuk riwayat.`)
     } catch (err) {
+      if (err instanceof Error && (err.message === 'Unauthorized' || err.message === 'Forbidden')) logout()
       setError(err instanceof Error ? err.message : 'Checkout failed')
     } finally {
       setLoading(false)
@@ -152,35 +188,76 @@ export default function CustomerPage() {
 
   return (
     <main className="customer-page">
-      <section className="admin-hero">
-        <div>
-          <p className="eyebrow">Customer dashboard</p>
-          <h1>Shop, cart, checkout.</h1>
-          <p className="lede">Dashboard customer untuk belanja katalog aktif dan memantau riwayat order.</p>
-        </div>
-        {token ? <button className="ghost-button" onClick={logout} type="button">Logout</button> : null}
-      </section>
-
-      {!token ? (
+      {!mounted || !token ? (
         <section className="auth-card customer-auth-card">
-          <p className="eyebrow">Customer access</p>
-          <h2>Login customer</h2>
-          <p className="muted">Gunakan akun customer. Akun admin akan ditolak dari dashboard ini.</p>
-          <form className="form-grid" onSubmit={handleLogin}>
-            <label>
-              Email
-              <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" />
-            </label>
-            <label>
-              Password
-              <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" />
-            </label>
-            <button disabled={loading} type="submit">{loading ? 'Signing in...' : 'Sign in'}</button>
-          </form>
+          <div className="auth-visual customer-auth-visual">
+            <p className="eyebrow">Solutech Customer</p>
+            <h1>Belanja lebih cepat.</h1>
+            <p>Masuk untuk melihat katalog aktif, mengelola cart, checkout, dan memantau order.</p>
+          </div>
+          <div className="auth-form-card">
+            <p className="eyebrow">Customer access</p>
+            <h2>Login customer</h2>
+            <p className="muted">Gunakan akun customer. Akun admin akan ditolak dari dashboard ini.</p>
+            <form className="form-grid" onSubmit={handleLogin}>
+              <label>
+                Email
+                <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" />
+              </label>
+              <label>
+                Password
+                <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" />
+              </label>
+              <button disabled={loading} type="submit">{loading ? 'Signing in...' : 'Sign in'}</button>
+            </form>
+          </div>
         </section>
       ) : (
-        <div className="customer-shell">
-          <aside className="customer-cart panel">
+        <>
+          <div className="promo-bar">Customer area: katalog aktif, persistent cart, checkout, dan riwayat order.</div>
+
+          <nav className="storefront-nav customer-storefront-nav">
+            <Link className="brand-mark" href="/">
+              <span>SC</span>
+              <strong>Solutech Commerce</strong>
+            </Link>
+            <input className="market-search" placeholder="Cari produk di katalog customer..." value={search} onChange={(event) => { setPage(1); setSearch(event.target.value) }} />
+            <div className="nav-links">
+              <a href="#customer-catalog">Katalog</a>
+              <a href="#customer-orders">Order</a>
+              <button className="ghost-button" onClick={logout} type="button">Logout</button>
+            </div>
+          </nav>
+
+          <section className="storefront-hero customer-marketplace-hero">
+            <div className="storefront-copy">
+              <p className="eyebrow">Customer marketplace</p>
+              <h1>Belanja produk aktif dalam satu dashboard.</h1>
+              <p className="storefront-lede">Cari produk, tambah ke cart, atur pengiriman, checkout, dan pantau order tanpa keluar halaman.</p>
+            </div>
+            <div className="hero-promo-card">
+              <span className="product-badge">Cart summary</span>
+              <h2>{cartCount} item</h2>
+              <p>Total belanja aktif di cart customer.</p>
+              <div className="hero-price-row">
+                <strong>{formatMoney(cartTotal)}</strong>
+                <span>{orders.length} orders</span>
+              </div>
+            </div>
+          </section>
+
+          <div className="customer-shell">
+          <aside className="customer-left-rail">
+            <section className="customer-summary-card panel">
+              <p className="eyebrow">Signed in</p>
+              <h2>{email}</h2>
+              <div className="summary-row"><span>Cart items</span><strong>{cartCount}</strong></div>
+              <div className="summary-row"><span>Cart total</span><strong>{formatMoney(cartTotal)}</strong></div>
+              <a className="product-cta" href="#checkout-panel">Checkout shortcut</a>
+              <button className="ghost-button" onClick={logout} type="button">Logout</button>
+            </section>
+
+          <section className="customer-cart panel" id="checkout-panel">
             <div className="panel-header">
               <div>
                 <p className="eyebrow">Cart</p>
@@ -250,16 +327,17 @@ export default function CustomerPage() {
               </label>
             </div>
             <button disabled={loading || !cart || cart.items.length === 0} onClick={checkout} type="button">{loading ? 'Processing...' : 'Checkout order'}</button>
+          </section>
           </aside>
 
           <section className="customer-content">
-            <div className="dashboard-topbar">
+            <div className="dashboard-topbar" id="customer-catalog">
               <div>
                 <p className="eyebrow">Catalog</p>
                 <h2>Produk aktif</h2>
                 <p className="muted">Cari produk, tambah ke cart, lalu checkout dalam satu halaman.</p>
               </div>
-              <input className="search-input" placeholder="Search products" value={search} onChange={(event) => { setPage(1); setSearch(event.target.value) }} />
+              <span className="stock-pill">{products.length} shown</span>
             </div>
 
             <div className="customer-product-grid">
@@ -292,7 +370,7 @@ export default function CustomerPage() {
               <button className="ghost-button" disabled={page >= totalPages} onClick={() => setPage((value) => value + 1)} type="button">Next</button>
             </div>
 
-            <section className="panel order-history">
+            <section className="panel order-history" id="customer-orders">
               <div className="panel-header">
                 <div>
                   <p className="eyebrow">Order history</p>
@@ -321,7 +399,8 @@ export default function CustomerPage() {
               </div>
             </section>
           </section>
-        </div>
+          </div>
+        </>
       )}
 
       {error ? <p className="status error">{error}</p> : null}
