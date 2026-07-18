@@ -7,6 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
+    "test": "TEST_DATABASE_URL=${TEST_DATABASE_URL:-postgresql://postgres:postgres@localhost:5432/solutech_test?schema=public} vitest run",
+    "test:watch": "TEST_DATABASE_URL=${TEST_DATABASE_URL:-postgresql://postgres:postgres@localhost:5432/solutech_test?schema=public} vitest",
+    "test:integration": "TEST_DATABASE_URL=${TEST_DATABASE_URL:-postgresql://postgres:postgres@localhost:5432/solutech_test?schema=public} vitest run tests/integration",
+    "test:coverage": "TEST_DATABASE_URL=${TEST_DATABASE_URL:-postgresql://postgres:postgres@localhost:5432/solutech_test?schema=public} vitest run --coverage",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
@@ -16,10 +20,10 @@
     "seed": "node prisma/seed.js"
   },
   "dependencies": {
-    "next": "^16.2.10",
     "@prisma/client": "^6.12.0",
     "bcryptjs": "^3.0.2",
     "jose": "^6.0.11",
+    "next": "^16.2.10",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "zod": "^4.1.11"
@@ -28,9 +32,11 @@
     "@types/node": "^26.1.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "@vitest/coverage-v8": "^2.1.9",
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.2.10",
     "prisma": "^6.12.0",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^2.1.9"
   }
 }

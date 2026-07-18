@@ -1,10 +1,21 @@
 import { prisma } from '@/lib/prisma'
 import { AppError } from '@/lib/errors'
-import type { CreateOrderInput, OrderRecord } from './order.types'
+import type { CreateOrderInput, ListOrdersQuery, OrderRecord } from './order.types'
 
-function toOrderRecord(order: {
+export function toOrderRecord(order: {
   id: number
   userId: number
+  status: 'PENDING' | 'PAID' | 'PROCESSING' | 'SHIPPED' | 'COMPLETED'
+  paymentStatus: 'PENDING' | 'PAID'
+  paymentMethod: 'BANK_TRANSFER' | 'EWALLET' | 'COD'
+  paymentReference: string
+  shippingName: string
+  shippingPhone: string
+  shippingAddress: string
+  shippingCity: string
+  shippingPostalCode: string
+  shippingCost: number
+  subtotal: number
   total: number
   items: Array<{
     id: number
@@ -19,6 +30,17 @@ function toOrderRecord(order: {
   return {
     id: order.id,
     userId: order.userId,
+    status: order.status,
+    paymentStatus: order.paymentStatus,
+    paymentMethod: order.paymentMethod,
+    paymentReference: order.paymentReference,
+    shippingName: order.shippingName,
+    shippingPhone: order.shippingPhone,
+    shippingAddress: order.shippingAddress,
+    shippingCity: order.shippingCity,
+    shippingPostalCode: order.shippingPostalCode,
+    shippingCost: order.shippingCost,
+    subtotal: order.subtotal,
     total: order.total,
     items: order.items.map((item) => ({
       id: item.id,
@@ -95,6 +117,17 @@ export async function createOrder(userId: number, input: CreateOrderInput) {
     const order = await tx.order.create({
       data: {
         userId,
+        status: 'PAID',
+        paymentStatus: 'PAID',
+        paymentMethod: 'EWALLET',
+        paymentReference: `LEGACY-${Date.now()}`,
+        shippingName: 'Legacy checkout',
+        shippingPhone: '-',
+        shippingAddress: '-',
+        shippingCity: '-',
+        shippingPostalCode: '-',
+        shippingCost: 0,
+        subtotal: total,
         total,
         items: {
           create: groupedItems.map((item) => {
@@ -134,4 +167,87 @@ export async function findOrdersByUser(userId: number) {
   })
 
   return orders.map(toOrderRecord)
+}
+
+export async function findOrderByUser(id: number, userId: number) {
+  const order = await prisma.order.findFirst({
+    where: { id, userId },
+    include: {
+      items: {
+        include: { product: true },
+      },
+    },
+  })
+
+  return order ? toOrderRecord(order) : null
+}
+
+export async function listOrdersForAdmin(query: ListOrdersQuery) {
+  const [total, items] = await prisma.$transaction([
+    prisma.order.count(),
+    prisma.order.findMany({
+      orderBy: { createdAt: 'desc' },
+      skip: (query.page - 1) * query.limit,
+      take: query.limit,
+      include: {
+        items: {
+          include: { product: true },
+        },
+      },
+    }),
+  ])
+
+  return {
+    items: items.map(toOrderRecord),
+    meta: {
+      page: query.page,
+      limit: query.limit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / query.limit)),
+    },
+  }
+}
+
+export async function updateOrderStatus(id: number, status: 'PENDING' | 'PAID' | 'PROCESSING' | 'SHIPPED' | 'COMPLETED') {
+  const order = await prisma.order.update({
+    where: { id },
+    data: { status },
+    include: {
+      items: {
+        include: { product: true },
+      },
+    },
+  })
+
+  return toOrderRecord(order)
+}
+
+export async function updateOrderPayment(id: number, paymentStatus: 'PENDING' | 'PAID') {
+  const order = await prisma.order.update({
+    where: { id },
+    data: {
+      paymentStatus,
+      ...(paymentStatus === 'PAID' ? { status: 'PAID' as const } : {}),
+    },
+    include: {
+      items: {
+        include: { product: true },
+      },
+    },
+  })
+
+  return toOrderRecord(order)
+}
+
+export async function findOrderById(id: number) {
+  const order = await prisma.order.findUnique({
+    where: { id },
+    include: {
+      items: {
+        include: { product: true },
+      },
+    },
+  })
+
+  return order ? toOrderRecord(order) : null
 }

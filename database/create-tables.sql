@@ -4,6 +4,30 @@ EXCEPTION
   WHEN duplicate_object THEN null;
 END $$;
 
+DO $$ BEGIN
+  CREATE TYPE "OrderStatus" AS ENUM ('PENDING', 'PAID', 'PROCESSING', 'SHIPPED', 'COMPLETED');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE "PaymentStatus" AS ENUM ('PENDING', 'PAID');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE "PaymentMethod" AS ENUM ('BANK_TRANSFER', 'EWALLET', 'COD');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE "InventoryMovementType" AS ENUM ('ORDER_CHECKOUT', 'ADMIN_ADJUSTMENT');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+
 CREATE TABLE IF NOT EXISTS "User" (
   id SERIAL PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,
@@ -25,9 +49,37 @@ CREATE TABLE IF NOT EXISTS "Product" (
   "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS "Cart" (
+  id SERIAL PRIMARY KEY,
+  "userId" INTEGER NOT NULL UNIQUE REFERENCES "User"(id) ON DELETE CASCADE,
+  "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+  "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS "CartItem" (
+  id SERIAL PRIMARY KEY,
+  "cartId" INTEGER NOT NULL REFERENCES "Cart"(id) ON DELETE CASCADE,
+  "productId" INTEGER NOT NULL REFERENCES "Product"(id),
+  quantity INTEGER NOT NULL,
+  "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+  "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+  CONSTRAINT "CartItem_cartId_productId_key" UNIQUE ("cartId", "productId")
+);
+
 CREATE TABLE IF NOT EXISTS "Order" (
   id SERIAL PRIMARY KEY,
   "userId" INTEGER NOT NULL REFERENCES "User"(id) ON DELETE CASCADE,
+  status "OrderStatus" NOT NULL DEFAULT 'PENDING',
+  "paymentStatus" "PaymentStatus" NOT NULL DEFAULT 'PENDING',
+  "paymentMethod" "PaymentMethod" NOT NULL,
+  "paymentReference" TEXT NOT NULL,
+  "shippingName" TEXT NOT NULL,
+  "shippingPhone" TEXT NOT NULL,
+  "shippingAddress" TEXT NOT NULL,
+  "shippingCity" TEXT NOT NULL,
+  "shippingPostalCode" TEXT NOT NULL,
+  "shippingCost" DOUBLE PRECISION NOT NULL DEFAULT 0,
+  subtotal DOUBLE PRECISION NOT NULL,
   total DOUBLE PRECISION NOT NULL,
   "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
   "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
@@ -39,4 +91,17 @@ CREATE TABLE IF NOT EXISTS "OrderItem" (
   "productId" INTEGER NOT NULL REFERENCES "Product"(id),
   quantity INTEGER NOT NULL,
   "unitPrice" DOUBLE PRECISION NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS "InventoryMovement" (
+  id SERIAL PRIMARY KEY,
+  "productId" INTEGER NOT NULL REFERENCES "Product"(id),
+  "userId" INTEGER NULL REFERENCES "User"(id) ON DELETE SET NULL,
+  "orderId" INTEGER NULL REFERENCES "Order"(id) ON DELETE SET NULL,
+  type "InventoryMovementType" NOT NULL,
+  "quantityChange" INTEGER NOT NULL,
+  "stockBefore" INTEGER NOT NULL,
+  "stockAfter" INTEGER NOT NULL,
+  note TEXT,
+  "createdAt" TIMESTAMP NOT NULL DEFAULT NOW()
 );

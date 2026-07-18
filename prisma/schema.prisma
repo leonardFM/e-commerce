@@ -12,37 +12,99 @@ enum UserRole {
   CUSTOMER
 }
 
+enum OrderStatus {
+  PENDING
+  PAID
+  PROCESSING
+  SHIPPED
+  COMPLETED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  EWALLET
+  COD
+}
+
+enum InventoryMovementType {
+  ORDER_CHECKOUT
+  ADMIN_ADJUSTMENT
+}
+
 model User {
-  id           Int      @id @default(autoincrement())
+  id                 Int                 @id @default(autoincrement())
   email        String   @unique
   passwordHash String
   name         String?
   role         UserRole @default(CUSTOMER)
   orders       Order[]
+  cart               Cart?
+  inventoryMovements InventoryMovement[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
 
 model Product {
-  id          Int         @id @default(autoincrement())
+  id                 Int                 @id @default(autoincrement())
   name        String
   description String?
   price       Float
   stock       Int         @default(0)
   deletedAt   DateTime?
   items       OrderItem[]
+  cartItems          CartItem[]
+  inventoryMovements InventoryMovement[]
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 }
 
+model Cart {
+  id        Int        @id @default(autoincrement())
+  userId    Int        @unique
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     CartItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model CartItem {
+  id        Int      @id @default(autoincrement())
+  cartId    Int
+  productId Int
+  quantity  Int
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([cartId, productId])
+}
+
 model Order {
-  id        Int         @id @default(autoincrement())
-  userId    Int
-  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  total     Float
-  items     OrderItem[]
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  id                 Int                 @id @default(autoincrement())
+  userId             Int
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status             OrderStatus         @default(PENDING)
+  paymentStatus      PaymentStatus       @default(PENDING)
+  paymentMethod      PaymentMethod
+  paymentReference   String
+  shippingName       String
+  shippingPhone      String
+  shippingAddress    String
+  shippingCity       String
+  shippingPostalCode String
+  shippingCost       Float               @default(0)
+  subtotal           Float
+  total              Float
+  items              OrderItem[]
+  inventoryMovements InventoryMovement[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 }
 
 model OrderItem {
@@ -53,4 +115,20 @@ model OrderItem {
   unitPrice Float
   order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product   Product  @relation(fields: [productId], references: [id])
+}
+
+model InventoryMovement {
+  id             Int                   @id @default(autoincrement())
+  productId      Int
+  userId         Int?
+  orderId        Int?
+  type           InventoryMovementType
+  quantityChange Int
+  stockBefore    Int
+  stockAfter     Int
+  note           String?
+  product        Product               @relation(fields: [productId], references: [id])
+  user           User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  order          Order?                @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  createdAt      DateTime              @default(now())
 }

@@ -8,7 +8,12 @@ export async function requireUser(request: NextRequest) {
   const token = getBearerToken(request.headers.get('authorization'))
   if (!token) throw new AppError('Unauthorized', 401)
 
-  return verifyJwt(token)
+  try {
+    return await verifyJwt(token)
+  } catch (error) {
+    if (error instanceof AppError) throw error
+    throw new AppError('Invalid token', 401)
+  }
 }
 
 export async function requireRole(request: NextRequest, role: UserRole) {

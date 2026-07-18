@@ -16,6 +16,9 @@ Panduan untuk agent yang bekerja di repo ini.
 - Development server: `npm run dev`
 - Build: `npm run build`
 - Lint: `npm run lint`
+- Run tests: `npm run test`
+- Run integration tests: `npm run test:integration`
+- Run test coverage: `npm run test:coverage`
 - Generate Prisma client: `npm run prisma:generate`
 - Run Prisma migration dev: `npm run prisma:migrate`
 - Seed database: `npm run prisma:seed`
@@ -27,6 +30,7 @@ Panduan untuk agent yang bekerja di repo ini.
 - Salin `.env.example` ke `.env` untuk menjalankan lokal.
 - `DATABASE_URL` wajib untuk Prisma/PostgreSQL.
 - `JWT_SECRET` wajib untuk sign dan verify token.
+- Untuk automated integration test, gunakan PostgreSQL database terpisah seperti `solutech_test`; jangan gunakan database development untuk test yang menjalankan cleanup data.
 - Jangan commit `.env`, secret, token, atau data kredensial lain.
 
 ## Architecture Rules
@@ -63,9 +67,12 @@ Panduan untuk agent yang bekerja di repo ini.
 ## Database And Prisma
 
 - Prisma client diekspor dari `lib/prisma.ts`.
-- Model utama: `User`, `Product`, `Order`, dan `OrderItem`.
+- Model utama: `User`, `Product`, `Cart`, `CartItem`, `Order`, `OrderItem`, dan `InventoryMovement`.
 - Product memakai soft delete lewat `deletedAt`; query product aktif harus mempertimbangkan `deletedAt: null`.
 - Order creation harus menjaga konsistensi stok dan total dalam transaction.
+- Checkout melalui `POST /api/checkout` harus menjaga konsistensi stok, total, order item, inventory movement, dan clear cart dalam transaction.
+- Simulasi payment gateway bersifat deterministik; payment gagal harus error tanpa membuat order, tanpa mengurangi stok, dan tanpa menghapus cart.
+- Inventory adjustment admin harus mencatat `InventoryMovement` dan tidak boleh membuat stok negatif.
 - Jangan mengubah schema Prisma tanpa memperbarui SQL/migration atau instruksi setup terkait jika diperlukan.
 - Setelah mengubah `prisma/schema.prisma`, jalankan `npm run prisma:generate`.
 
@@ -78,6 +85,13 @@ Panduan untuk agent yang bekerja di repo ini.
 - Validation error ditangani oleh `failure()` sebagai HTTP 400.
 - Gunakan HTTP 401 untuk unauthenticated, 403 untuk forbidden/role tidak sesuai, 404 untuk resource tidak ditemukan, dan 409 untuk konflik seperti insufficient stock.
 
+## UI Routes
+
+- `/` adalah storefront/homepage toko online dan mengambil produk unggulan aktif secara server-side dari Prisma.
+- `/admin` adalah dashboard admin client-side untuk manajemen produk; UI harus menolak user non-`ADMIN`, dan API mutasi produk tetap wajib memakai `requireRole(request, 'ADMIN')`.
+- `/customer` adalah dashboard customer client-side untuk katalog, persistent cart, checkout, dan riwayat order; UI harus menolak user non-`CUSTOMER`.
+- Cart customer dipersist di database lewat `Cart` dan `CartItem`; endpoint cart wajib user-scoped memakai `user.userId` dari JWT.
+
 ## Existing Endpoints
 
 - `POST /api/auth/login`
@@ -86,8 +100,20 @@ Panduan untuk agent yang bekerja di repo ini.
 - `GET /api/products/:id`
 - `PATCH /api/products/:id`
 - `DELETE /api/products/:id`
+- `GET /api/cart`
+- `DELETE /api/cart`
+- `POST /api/cart/items`
+- `PATCH /api/cart/items/:productId`
+- `DELETE /api/cart/items/:productId`
+- `POST /api/checkout`
 - `GET /api/orders`
 - `POST /api/orders`
+- `GET /api/orders/:id`
+- `GET /api/admin/orders`
+- `PATCH /api/admin/orders/:id/status`
+- `PATCH /api/admin/orders/:id/payment`
+- `GET /api/inventory/movements`
+- `POST /api/inventory/adjustments`
 
 ## Code Style
 
@@ -104,6 +130,7 @@ Panduan untuk agent yang bekerja di repo ini.
 - Untuk perubahan build-sensitive, jalankan `npm run build` jika memungkinkan.
 - Untuk perubahan Prisma, jalankan `npm run prisma:generate` dan verifikasi query terkait.
 - Untuk perubahan endpoint, uji manual dengan HTTP client jika server dan database tersedia.
+- Untuk perubahan test/API behavior, jalankan `npm run test` atau minimal `npm run test:integration` jika test database tersedia.
 
 ## Manual API Testing Notes
 
@@ -111,6 +138,13 @@ Panduan untuk agent yang bekerja di repo ini.
 - Seeded customer: `customer@solutech.test` / `password123`.
 - Login dulu melalui `POST /api/auth/login`, lalu pakai token untuk endpoint protected.
 - Header auth: `Authorization: Bearer <token>`.
+- Manual UI smoke test: homepage `/`, admin dashboard `/admin`, dan customer dashboard `/customer`.
+- Verifikasi RBAC UI: customer ditolak dari `/admin`, admin ditolak dari `/customer`.
+- Verifikasi customer flow: login customer, lihat katalog, tambah cart, checkout, dan cek riwayat order.
+- Verifikasi persistent cart: tambah item, refresh/fetch cart ulang, update quantity, lalu checkout.
+- Verifikasi checkout payment simulation: `EWALLET` default paid, `COD` pending, dan `simulatePaymentStatus: FAILED` harus gagal tanpa order/stok/cart berubah.
+- Verifikasi admin flow: login admin, create/update/delete product dari dashboard.
+- Verifikasi admin order/inventory flow: lihat semua order, update payment/status, buat inventory adjustment positif/negatif valid, dan pastikan adjustment negatif melebihi stok gagal.
 
 ## Git Safety
 
