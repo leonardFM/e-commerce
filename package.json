@@ -16,25 +16,28 @@
     "prisma:studio": "prisma studio",
     "prisma:seed": "prisma db seed"
   },
-  "prisma": {
-    "seed": "node prisma/seed.js"
-  },
   "dependencies": {
     "@prisma/client": "^6.12.0",
     "bcryptjs": "^3.0.2",
     "ioredis": "^5.11.1",
     "jose": "^6.0.11",
     "next": "^16.2.10",
+    "next-swagger-doc": "^0.4.1",
     "pino": "^10.3.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
+    "sanitize-html": "^2.17.5",
+    "swagger-ui-react": "^5.32.9",
     "zod": "^4.1.11"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "@types/sanitize-html": "^2.16.1",
+    "@types/swagger-ui-react": "^5.18.0",
     "@vitest/coverage-v8": "^2.1.9",
+    "dotenv": "^17.4.2",
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.2.10",
     "prisma": "^6.12.0",

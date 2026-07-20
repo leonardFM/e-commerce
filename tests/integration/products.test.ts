@@ -124,14 +124,13 @@ describe('products integration', () => {
     })
     expect(longName.response.status).toBe(400)
 
-    const xssName = '<img src=x onerror=alert(1)>'
-    const xssProduct = await callRoute<{ data: { name: string } }>(createProductRoute, '/api/products', {
+    const xssProduct = await callRoute<{ error: string }>(createProductRoute, '/api/products', {
       method: 'POST',
       token: admin.token,
-      body: { name: xssName, description: '<script>alert(1)</script>', price: 1000, stock: 1 },
+      body: { name: '<img src=x onerror=alert(1)>', description: '<script>alert(1)</script>', price: 1000, stock: 1 },
     })
-    expect(xssProduct.response.status).toBe(201)
-    expect(xssProduct.payload.data.name).toBe(xssName)
+    expect(xssProduct.response.status).toBe(400)
+    expect(xssProduct.payload.error).toBe('Validation error')
 
     const longSearch = await callRoute(listProductsRoute, '/api/products', {
       token: customer.token,

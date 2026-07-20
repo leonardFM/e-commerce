@@ -4,20 +4,17 @@ import { POST as loginRoute } from '@/app/api/auth/login/route'
 
 type RouteHandler = (request: NextRequest, context?: never) => Promise<Response>
 
-export function authHeader(token: string) {
-  return { Authorization: `Bearer ${token}` }
-}
-
 export function createJsonRequest(path: string, init: { method?: string; token?: string; body?: unknown; searchParams?: Record<string, string> } = {}) {
   const url = new URL(path, 'http://localhost')
   for (const [key, value] of Object.entries(init.searchParams ?? {})) url.searchParams.set(key, value)
 
+  const headers: Record<string, string> = {}
+  if (init.body !== undefined) headers['Content-Type'] = 'application/json'
+  if (init.token) headers['Cookie'] = `token=${init.token}`
+
   return new NextRequest(url, {
     method: init.method ?? 'GET',
-    headers: {
-      ...(init.body === undefined ? {} : { 'Content-Type': 'application/json' }),
-      ...(init.token ? authHeader(init.token) : {}),
-    },
+    headers,
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
   })
 }
@@ -46,11 +43,18 @@ export async function loginAsOtherCustomer() {
 }
 
 async function login(email: string, password: string) {
-  const { response, payload } = await callRoute<{ data: { token: string; user: { id: number; email: string; role: 'ADMIN' | 'CUSTOMER' } } }>(loginRoute, '/api/auth/login', {
+  const response = await loginRoute(createJsonRequest('/api/auth/login', {
     method: 'POST',
     body: { email, password },
-  })
+  }))
+
+  const payload = await parseJsonResponse<{ data: { user: { id: number; email: string; role: 'ADMIN' | 'CUSTOMER' } } }>(response)
 
   if (!response.ok) throw new Error(`Login failed for ${email}`)
-  return payload.data
+
+  const setCookieHeader = response.headers.get('set-cookie') ?? ''
+  const tokenMatch = setCookieHeader.match(/token=([^;]+)/)
+  const token = tokenMatch ? decodeURIComponent(tokenMatch[1]) : ''
+
+  return { token, user: payload.data.user }
 }

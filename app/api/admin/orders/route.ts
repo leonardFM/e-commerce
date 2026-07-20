@@ -4,6 +4,27 @@ import { requireRole } from '@/lib/request'
 import { listOrdersQuerySchema } from '@/modules/orders/order.schema'
 import { listAdminOrdersService } from '@/modules/orders/order.service'
 
+/**
+ * @openapi
+ * /api/admin/orders:
+ *   get:
+ *     tags: [Admin Orders]
+ *     summary: List all orders (admin only)
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 10, maximum: 100 }
+ *     responses:
+ *       200:
+ *         description: Paginated list of all orders
+ *       403:
+ *         description: Forbidden (not admin)
+ */
 export async function GET(request: NextRequest) {
   let userId: number | undefined
   try {

@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import { defineConfig } from 'vitest/config'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
@@ -15,9 +16,10 @@ export default defineConfig({
     environment: 'node',
     globals: true,
     include: ['tests/**/*.test.ts'],
+    globalSetup: ['./tests/helpers/global-setup.ts'],
     env: {
       DATABASE_URL: databaseUrl,
-      JWT_SECRET: process.env.JWT_SECRET ?? 'test-jwt-secret',
+      JWT_SECRET: process.env.JWT_SECRET ?? 'test-secret-that-is-at-least-32-char-long',
     },
     pool: 'forks',
     poolOptions: {

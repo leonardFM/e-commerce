@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
 import { AppError } from './errors'
 import { ZodError } from 'zod'
+import { cookieOptions } from './cookies'
 import { logger } from './logger'
+import { getNewToken } from './token-context'
 
 export type FailureContext = {
   feature?: string
@@ -11,13 +13,23 @@ export type FailureContext = {
 }
 
 export function success<T>(data: T, status = 200) {
-  return NextResponse.json({ data }, { status })
+  const newToken = getNewToken()
+  const res = NextResponse.json({ data }, { status })
+  if (newToken) {
+    res.cookies.set('token', newToken, cookieOptions())
+  }
+  return res
 }
 
 export function failure(error: unknown, context: FailureContext = {}) {
   if (error instanceof ZodError) {
     logger.warn({ ...context, statusCode: 400, issueCount: error.issues.length }, 'api_validation_error')
-    return NextResponse.json({ error: 'Validation error', issues: error.issues }, { status: 400 })
+    const sanitizedIssues = error.issues.map((issue) => ({
+      path: issue.path,
+      code: issue.code,
+      message: issue.message,
+    }))
+    return NextResponse.json({ error: 'Validation error', issues: sanitizedIssues }, { status: 400 })
   }
 
   if (error instanceof AppError) {

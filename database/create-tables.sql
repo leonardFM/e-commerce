@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS "Product" (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL,
   description TEXT,
-  price DOUBLE PRECISION NOT NULL,
+  price DECIMAL(12,2) NOT NULL,
   stock INTEGER NOT NULL DEFAULT 0,
   "deletedAt" TIMESTAMP NULL,
   "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
@@ -78,9 +78,9 @@ CREATE TABLE IF NOT EXISTS "Order" (
   "shippingAddress" TEXT NOT NULL,
   "shippingCity" TEXT NOT NULL,
   "shippingPostalCode" TEXT NOT NULL,
-  "shippingCost" DOUBLE PRECISION NOT NULL DEFAULT 0,
-  subtotal DOUBLE PRECISION NOT NULL,
-  total DOUBLE PRECISION NOT NULL,
+  "shippingCost" DECIMAL(12,2) NOT NULL DEFAULT 0,
+  subtotal DECIMAL(12,2) NOT NULL,
+  total DECIMAL(12,2) NOT NULL,
   "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
   "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
 );
@@ -89,8 +89,9 @@ CREATE TABLE IF NOT EXISTS "OrderItem" (
   id SERIAL PRIMARY KEY,
   "orderId" INTEGER NOT NULL REFERENCES "Order"(id) ON DELETE CASCADE,
   "productId" INTEGER NOT NULL REFERENCES "Product"(id),
+  "productName" TEXT NOT NULL,
   quantity INTEGER NOT NULL,
-  "unitPrice" DOUBLE PRECISION NOT NULL
+  "unitPrice" DECIMAL(12,2) NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS "InventoryMovement" (
@@ -105,3 +106,19 @@ CREATE TABLE IF NOT EXISTS "InventoryMovement" (
   note TEXT,
   "createdAt" TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+-- Check constraints
+ALTER TABLE "Product" ADD CONSTRAINT "Product_stock_check" CHECK (stock >= 0);
+ALTER TABLE "Product" ADD CONSTRAINT "Product_price_check" CHECK (price >= 0);
+ALTER TABLE "CartItem" ADD CONSTRAINT "CartItem_quantity_check" CHECK (quantity > 0);
+ALTER TABLE "OrderItem" ADD CONSTRAINT "OrderItem_quantity_check" CHECK (quantity > 0);
+ALTER TABLE "Order" ADD CONSTRAINT "Order_shippingCost_check" CHECK ("shippingCost" >= 0);
+ALTER TABLE "Order" ADD CONSTRAINT "Order_subtotal_check" CHECK (subtotal >= 0);
+ALTER TABLE "Order" ADD CONSTRAINT "Order_total_check" CHECK (total >= 0);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS "idx_product_active_list" ON "Product" ("deletedAt", "createdAt");
+CREATE INDEX IF NOT EXISTS "idx_order_user" ON "Order" ("userId", "createdAt");
+CREATE INDEX IF NOT EXISTS "idx_order_created" ON "Order" ("createdAt");
+CREATE INDEX IF NOT EXISTS "idx_inventory_product" ON "InventoryMovement" ("productId", "createdAt");
+CREATE INDEX IF NOT EXISTS "idx_inventory_type" ON "InventoryMovement" (type, "createdAt");

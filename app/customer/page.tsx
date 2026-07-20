@@ -1,6 +1,7 @@
 "use client"
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import type { FormEvent } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import {
@@ -26,10 +27,17 @@ function formatMoney(value: number) {
 }
 
 export default function CustomerPage() {
-  const [token, setToken] = useState('')
+  const router = useRouter()
+  const [authenticated, setAuthenticated] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.localStorage.getItem('customer-role') === 'CUSTOMER'
+  })
   const [mounted, setMounted] = useState(false)
-  const [email, setEmail] = useState('customer@solutech.test')
-  const [password, setPassword] = useState('password123')
+  const [email, setEmail] = useState(() => {
+    if (typeof window === 'undefined') return ''
+    return window.localStorage.getItem('customer-email') ?? ''
+  })
+  const [password, setPassword] = useState('')
   const [products, setProducts] = useState<CustomerProduct[]>([])
   const [orders, setOrders] = useState<CustomerOrder[]>([])
   const [cart, setCart] = useState<CustomerCart | null>(null)
@@ -54,53 +62,41 @@ export default function CustomerPage() {
   const cartCount = useMemo(() => cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0, [cart])
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      const savedToken = window.localStorage.getItem('customer-token') ?? ''
-      const savedRole = window.localStorage.getItem('customer-role') ?? ''
-      const savedEmail = window.localStorage.getItem('customer-email') ?? ''
-      if (savedToken && savedRole !== 'CUSTOMER') {
-        window.localStorage.removeItem('customer-token')
-        window.localStorage.removeItem('customer-role')
-        window.localStorage.removeItem('customer-email')
-      } else {
-        setToken(savedToken)
-        if (savedEmail) setEmail(savedEmail)
-      }
-      setMounted(true)
-    }, 0)
-
+    const timer = window.setTimeout(() => setMounted(true), 0)
     return () => window.clearTimeout(timer)
   }, [])
 
   useEffect(() => {
-    if (!token) return
+    if (!authenticated) return
 
     const timer = window.setTimeout(async () => {
       try {
         setError('')
         const [productResult, orderResult, cartResult] = await Promise.all([
-          fetchCustomerProducts(token, { page, limit: 8, search }),
-          fetchCustomerOrders(token),
-          fetchCustomerCart(token),
+          fetchCustomerProducts({ page, limit: 8, search }),
+          fetchCustomerOrders(),
+          fetchCustomerCart(),
         ])
         setProducts(productResult.items)
         setTotalPages(productResult.meta.totalPages)
         setOrders(orderResult)
         setCart(cartResult)
       } catch (err) {
-        if (err instanceof Error && (err.message === 'Unauthorized' || err.message === 'Forbidden')) {
-          window.localStorage.removeItem('customer-token')
-          setToken('')
+        if (err instanceof Error && ((err as any).status === 401 || (err as any).status === 403)) {
+          window.localStorage.removeItem('customer-role')
+          window.localStorage.removeItem('customer-email')
+          setAuthenticated(false)
           setProducts([])
           setOrders([])
           setCart(null)
+          router.push('/customer')
         }
         setError(err instanceof Error ? err.message : 'Failed to load customer dashboard')
       }
     }, 200)
 
     return () => window.clearTimeout(timer)
-  }, [token, page, search])
+  }, [authenticated, page, search])
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -114,8 +110,11 @@ export default function CustomerPage() {
         throw new Error('Only customer users can access this dashboard')
       }
 
-      setToken(result.token)
-      window.localStorage.setItem('customer-token', result.token)
+      window.localStorage.removeItem('admin-role')
+      window.localStorage.removeItem('admin-email')
+
+      setAuthenticated(true)
+      setEmail(result.user.email)
       window.localStorage.setItem('customer-role', result.user.role)
       window.localStorage.setItem('customer-email', result.user.email)
       setMessage(`Signed in as ${result.user.email}`)
@@ -126,11 +125,11 @@ export default function CustomerPage() {
     }
   }
 
-  function logout() {
-    window.localStorage.removeItem('customer-token')
+  async function logout() {
+    await fetch('/api/auth/logout', { method: 'POST' })
     window.localStorage.removeItem('customer-role')
     window.localStorage.removeItem('customer-email')
-    setToken('')
+    setAuthenticated(false)
     setProducts([])
     setOrders([])
     setCart(null)
@@ -139,10 +138,9 @@ export default function CustomerPage() {
 
   async function addToCart(product: CustomerProduct) {
     if (product.stock <= 0) return
-    if (!token) return
     setError('')
     try {
-      setCart(await addCustomerCartItem(token, product.id, 1))
+      setCart(await addCustomerCartItem(product.id, 1))
     } catch (err) {
       if (err instanceof Error && (err.message === 'Unauthorized' || err.message === 'Forbidden')) logout()
       setError(err instanceof Error ? err.message : 'Failed to add item to cart')
@@ -150,10 +148,9 @@ export default function CustomerPage() {
   }
 
   async function updateQuantity(productId: number, quantity: number) {
-    if (!token) return
     setError('')
     try {
-      setCart(await updateCustomerCartItem(token, productId, quantity))
+      setCart(await updateCustomerCartItem(productId, quantity))
     } catch (err) {
       if (err instanceof Error && (err.message === 'Unauthorized' || err.message === 'Forbidden')) logout()
       setError(err instanceof Error ? err.message : 'Failed to update cart item')
@@ -161,17 +158,17 @@ export default function CustomerPage() {
   }
 
   async function checkout() {
-    if (!token || !cart || cart.items.length === 0) return
+    if (!cart || cart.items.length === 0) return
     setLoading(true)
     setError('')
     setMessage('')
 
     try {
-      const result = await checkoutCustomerCart(token, checkoutForm)
+      const result = await checkoutCustomerCart(checkoutForm)
       const [productResult, orderResult, cartResult] = await Promise.all([
-        fetchCustomerProducts(token, { page, limit: 8, search }),
-        fetchCustomerOrders(token),
-        fetchCustomerCart(token),
+        fetchCustomerProducts({ page, limit: 8, search }),
+        fetchCustomerOrders(),
+        fetchCustomerCart(),
       ])
       setProducts(productResult.items)
       setTotalPages(productResult.meta.totalPages)
@@ -188,7 +185,7 @@ export default function CustomerPage() {
 
   return (
     <main className="customer-page">
-      {!mounted || !token ? (
+      {!mounted || !authenticated ? (
         <section className="auth-card customer-auth-card">
           <div className="auth-visual customer-auth-visual">
             <p className="eyebrow">Solutech Customer</p>
@@ -210,6 +207,10 @@ export default function CustomerPage() {
               </label>
               <button disabled={loading} type="submit">{loading ? 'Signing in...' : 'Sign in'}</button>
             </form>
+            <div className="auth-link-row">
+              <span>Belum punya akun?</span>
+              <Link className="ghost-button" href="/register">Daftar customer baru</Link>
+            </div>
           </div>
         </section>
       ) : (
@@ -253,7 +254,6 @@ export default function CustomerPage() {
               <h2>{email}</h2>
               <div className="summary-row"><span>Cart items</span><strong>{cartCount}</strong></div>
               <div className="summary-row"><span>Cart total</span><strong>{formatMoney(cartTotal)}</strong></div>
-              <a className="product-cta" href="#checkout-panel">Checkout shortcut</a>
               <button className="ghost-button" onClick={logout} type="button">Logout</button>
             </section>
 

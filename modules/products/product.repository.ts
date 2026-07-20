@@ -1,17 +1,18 @@
 import { prisma } from '@/lib/prisma'
+import { AppError } from '@/lib/errors'
 import type { CreateProductInput, ListProductsQuery, ProductListResult, ProductRecord, UpdateProductInput } from './product.types'
 
 function toProductRecord(value: {
   id: number
   name: string
   description: string | null
-  price: number
+  price: unknown
   stock: number
   deletedAt: Date | null
   createdAt: Date
   updatedAt: Date
 }): ProductRecord {
-  return value
+  return { ...value, price: Number(value.price) }
 }
 
 export async function createProduct(data: CreateProductInput) {
@@ -69,14 +70,17 @@ export async function listFeaturedProducts(limit = 8) {
 }
 
 export async function updateProduct(id: number, data: UpdateProductInput) {
-  const product = await prisma.product.update({
-    where: { id },
+  const product = await prisma.product.updateMany({
+    where: { id, deletedAt: null },
     data,
   })
-  return toProductRecord(product)
+  if (product.count === 0) throw new AppError('Product not found', 404)
+  return toProductRecord(await prisma.product.findUniqueOrThrow({ where: { id } }))
 }
 
 export async function softDeleteProduct(id: number) {
+  const existing = await prisma.product.findFirst({ where: { id, deletedAt: null } })
+  if (!existing) throw new AppError('Product not found', 404)
   const product = await prisma.product.update({
     where: { id },
     data: { deletedAt: new Date() },

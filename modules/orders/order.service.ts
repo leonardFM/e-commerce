@@ -1,23 +1,21 @@
 import { AppError } from '@/lib/errors'
 import { logger } from '@/lib/logger'
 import { elapsedMs, startTimer } from '@/lib/performance'
-import { invalidateProductCaches } from '@/modules/products/product.cache'
-import { createOrder, findOrderById, findOrderByUser, findOrdersByUser, listOrdersForAdmin, updateOrderPayment, updateOrderStatus } from './order.repository'
-import type { CreateOrderInput, ListOrdersQuery, OrderStatus, PaymentStatus } from './order.types'
+import { findOrderById, findOrderByUser, findOrdersByUser, listOrdersForAdmin, updateOrderPayment, updateOrderStatus } from './order.repository'
+import type { ListOrdersQuery, OrderStatus, PaymentStatus } from './order.types'
 
-export async function createOrderService(userId: number, input: CreateOrderInput) {
-  const start = startTimer()
-  try {
-    const order = await createOrder(userId, input)
-    await Promise.all(order.items.map((item) => invalidateProductCaches(item.productId)))
-    logger.info({ userId, orderId: order.id, total: order.total, durationMs: elapsedMs(start) }, 'order_created')
-    return order
-  } catch (error) {
-    logger.warn({ err: error, userId, durationMs: elapsedMs(start) }, 'order_create_failed')
-    if (error instanceof AppError) throw error
-    const message = error instanceof Error ? error.message : 'Failed to create order'
-    if (message.includes('Insufficient stock')) throw new AppError(message, 409)
-    throw new AppError(message, 400)
+const VALID_TRANSITIONS: Record<string, string[]> = {
+  PENDING: ['PAID', 'PROCESSING'],
+  PAID: ['PROCESSING'],
+  PROCESSING: ['SHIPPED'],
+  SHIPPED: ['COMPLETED'],
+  COMPLETED: [],
+}
+
+function validateStatusTransition(current: OrderStatus, next: OrderStatus): void {
+  const allowed = VALID_TRANSITIONS[current]
+  if (!allowed?.includes(next)) {
+    throw new AppError(`Cannot transition from ${current} to ${next}`, 409)
   }
 }
 
@@ -39,10 +37,7 @@ export async function updateOrderStatusService(id: number, status: OrderStatus) 
   const start = startTimer()
   const order = await findOrderById(id)
   if (!order) throw new AppError('Order not found', 404)
-  if (order.status === 'COMPLETED' && status !== 'COMPLETED') {
-    logger.warn({ orderId: id, currentStatus: order.status, requestedStatus: status }, 'order_invalid_status_transition')
-    throw new AppError('Completed order status cannot be changed', 409)
-  }
+  validateStatusTransition(order.status, status)
   const updated = await updateOrderStatus(id, status)
   logger.info({ orderId: id, status, durationMs: elapsedMs(start) }, 'order_status_updated')
   return updated
@@ -52,9 +47,16 @@ export async function updateOrderPaymentService(id: number, paymentStatus: Payme
   const start = startTimer()
   const order = await findOrderById(id)
   if (!order) throw new AppError('Order not found', 404)
+  if (order.paymentStatus === 'PAID' && paymentStatus === 'PENDING') {
+    logger.warn({ orderId: id, currentPaymentStatus: order.paymentStatus, requestedPaymentStatus: paymentStatus }, 'order_payment_regression_denied')
+    throw new AppError('Cannot change payment from PAID to PENDING', 409)
+  }
   if (order.status === 'COMPLETED' && paymentStatus !== order.paymentStatus) {
     logger.warn({ orderId: id, currentPaymentStatus: order.paymentStatus, requestedPaymentStatus: paymentStatus }, 'order_invalid_payment_transition')
     throw new AppError('Completed order payment cannot be changed', 409)
+  }
+  if (paymentStatus === 'PAID' && order.paymentStatus !== 'PAID') {
+    validateStatusTransition(order.status, 'PAID')
   }
   const updated = await updateOrderPayment(id, paymentStatus)
   logger.info({ orderId: id, paymentStatus, durationMs: elapsedMs(start) }, 'order_payment_updated')

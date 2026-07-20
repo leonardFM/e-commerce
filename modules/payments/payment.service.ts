@@ -1,8 +1,9 @@
+import { randomUUID } from 'crypto'
 import { AppError } from '@/lib/errors'
 import type { PaymentSimulationResult, SimulatePaymentInput } from './payment.types'
 
 function generatePaymentReference() {
-  return `PAY-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`
+  return `PAY-${randomUUID()}`
 }
 
 export function simulatePayment(input: SimulatePaymentInput): PaymentSimulationResult {

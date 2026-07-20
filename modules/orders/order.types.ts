@@ -1,12 +1,3 @@
-export type CreateOrderItemInput = {
-  productId: number
-  quantity: number
-}
-
-export type CreateOrderInput = {
-  items: CreateOrderItemInput[]
-}
-
 export type OrderStatus = 'PENDING' | 'PAID' | 'PROCESSING' | 'SHIPPED' | 'COMPLETED'
 export type PaymentStatus = 'PENDING' | 'PAID'
 export type PaymentMethod = 'BANK_TRANSFER' | 'EWALLET' | 'COD'

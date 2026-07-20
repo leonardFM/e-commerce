@@ -53,7 +53,7 @@ model Product {
   id                 Int                 @id @default(autoincrement())
   name        String
   description String?
-  price       Float
+  price       Decimal @db.Decimal(12,2)
   stock       Int         @default(0)
   deletedAt   DateTime?
   items       OrderItem[]
@@ -61,6 +61,8 @@ model Product {
   inventoryMovements InventoryMovement[]
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
+
+  @@index([deletedAt, createdAt])
 }
 
 model Cart {
@@ -98,23 +100,27 @@ model Order {
   shippingAddress    String
   shippingCity       String
   shippingPostalCode String
-  shippingCost       Float               @default(0)
-  subtotal           Float
-  total              Float
+  shippingCost       Decimal             @db.Decimal(12,2) @default("0")
+  subtotal           Decimal             @db.Decimal(12,2)
+  total              Decimal             @db.Decimal(12,2)
   items              OrderItem[]
   inventoryMovements InventoryMovement[]
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
 }
 
 model OrderItem {
-  id        Int      @id @default(autoincrement())
-  orderId   Int
-  productId Int
-  quantity  Int
-  unitPrice Float
-  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product   Product  @relation(fields: [productId], references: [id])
+  id          Int      @id @default(autoincrement())
+  orderId     Int
+  productId   Int
+  productName String   @default("Unknown Product")
+  quantity    Int
+  unitPrice   Decimal @db.Decimal(12,2)
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product     Product  @relation(fields: [productId], references: [id])
 }
 
 model InventoryMovement {
@@ -131,4 +137,7 @@ model InventoryMovement {
   user           User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
   order          Order?                @relation(fields: [orderId], references: [id], onDelete: SetNull)
   createdAt      DateTime              @default(now())
+
+  @@index([productId, createdAt])
+  @@index([type, createdAt])
 }

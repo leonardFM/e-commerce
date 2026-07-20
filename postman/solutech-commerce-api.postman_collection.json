@@ -1,0 +1,102 @@
+{
+  "info": {
+    "name": "Solutech Commerce API",
+    "description": "Postman collection untuk seluruh endpoint Solutech Commerce API. Jalankan request login customer/admin terlebih dahulu agar variable token tersimpan otomatis. Endpoint protected memakai header Authorization: Bearer {{customerToken}} atau Authorization: Bearer {{adminToken}}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000", "type": "string" },
+    { "key": "customerToken", "value": "", "type": "string" },
+    { "key": "adminToken", "value": "", "type": "string" },
+    { "key": "productId", "value": "1", "type": "string" },
+    { "key": "orderId", "value": "1", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register Customer",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"newcustomer@solutech.test\",\n  \"password\": \"password123\",\n  \"name\": \"New Customer\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/auth/register", "host": ["{{baseUrl}}"], "path": ["api", "auth", "register"] }
+          }
+        },
+        {
+          "name": "Login Customer",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const json = pm.response.json()", "if (json.data && json.data.token) {", "  pm.collectionVariables.set('customerToken', json.data.token)", "}"] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"customer@solutech.test\",\n  \"password\": \"password123\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "auth", "login"] }
+          }
+        },
+        {
+          "name": "Login Admin",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const json = pm.response.json()", "if (json.data && json.data.token) {", "  pm.collectionVariables.set('adminToken', json.data.token)", "}"] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@solutech.test\",\n  \"password\": \"password123\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "auth", "login"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "description": "Product aktif memakai soft delete; endpoint list/detail hanya mengembalikan produk aktif sesuai implementasi API.",
+      "item": [
+        { "name": "List Products", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }], "url": { "raw": "{{baseUrl}}/api/products?page=1&limit=10&search=", "host": ["{{baseUrl}}"], "path": ["api", "products"], "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "10" }, { "key": "search", "value": "" }] } } },
+        { "name": "Create Product", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Keyboard Mechanical\",\n  \"description\": \"Keyboard untuk kerja dan gaming\",\n  \"price\": 350000,\n  \"stock\": 20\n}" }, "url": { "raw": "{{baseUrl}}/api/products", "host": ["{{baseUrl}}"], "path": ["api", "products"] } } },
+        { "name": "Get Product Detail", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }], "url": { "raw": "{{baseUrl}}/api/products/{{productId}}", "host": ["{{baseUrl}}"], "path": ["api", "products", "{{productId}}"] } } },
+        { "name": "Update Product", "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Keyboard Mechanical Updated\",\n  \"description\": \"Deskripsi baru\",\n  \"price\": 375000,\n  \"stock\": 25\n}" }, "url": { "raw": "{{baseUrl}}/api/products/{{productId}}", "host": ["{{baseUrl}}"], "path": ["api", "products", "{{productId}}"] } } },
+        { "name": "Delete Product", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }], "url": { "raw": "{{baseUrl}}/api/products/{{productId}}", "host": ["{{baseUrl}}"], "path": ["api", "products", "{{productId}}"] } } }
+      ]
+    },
+    {
+      "name": "Cart",
+      "item": [
+        { "name": "Get Cart", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }], "url": { "raw": "{{baseUrl}}/api/cart", "host": ["{{baseUrl}}"], "path": ["api", "cart"] } } },
+        { "name": "Clear Cart", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }], "url": { "raw": "{{baseUrl}}/api/cart", "host": ["{{baseUrl}}"], "path": ["api", "cart"] } } },
+        { "name": "Add Cart Item", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"productId\": 1,\n  \"quantity\": 2\n}" }, "url": { "raw": "{{baseUrl}}/api/cart/items", "host": ["{{baseUrl}}"], "path": ["api", "cart", "items"] } } },
+        { "name": "Update Cart Item", "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"quantity\": 3\n}" }, "url": { "raw": "{{baseUrl}}/api/cart/items/{{productId}}", "host": ["{{baseUrl}}"], "path": ["api", "cart", "items", "{{productId}}"] } } },
+        { "name": "Remove Cart Item", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }], "url": { "raw": "{{baseUrl}}/api/cart/items/{{productId}}", "host": ["{{baseUrl}}"], "path": ["api", "cart", "items", "{{productId}}"] } } }
+      ]
+    },
+    {
+      "name": "Checkout",
+      "description": "Checkout tetap mengandalkan transaksi PostgreSQL di backend untuk stok, total, order item, inventory movement, dan clear cart.",
+      "item": [
+        { "name": "Checkout Cart", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"paymentMethod\": \"EWALLET\",\n  \"shippingName\": \"Customer Solutech\",\n  \"shippingPhone\": \"08123456789\",\n  \"shippingAddress\": \"Jl. Contoh No. 1\",\n  \"shippingCity\": \"Jakarta\",\n  \"shippingPostalCode\": \"12345\",\n  \"shippingCost\": 15000,\n  \"simulatePaymentStatus\": \"PAID\"\n}" }, "url": { "raw": "{{baseUrl}}/api/checkout", "host": ["{{baseUrl}}"], "path": ["api", "checkout"] } } }
+      ]
+    },
+    {
+      "name": "Orders",
+      "description": "Order creation tetap mengandalkan transaction safety backend untuk stok dan total.",
+      "item": [
+        { "name": "List My Orders", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }], "url": { "raw": "{{baseUrl}}/api/orders", "host": ["{{baseUrl}}"], "path": ["api", "orders"] } } },
+        { "name": "Create Order Direct", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"items\": [\n    {\n      \"productId\": 1,\n      \"quantity\": 2\n    }\n  ]\n}" }, "url": { "raw": "{{baseUrl}}/api/orders", "host": ["{{baseUrl}}"], "path": ["api", "orders"] } } },
+        { "name": "Get My Order Detail", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }], "url": { "raw": "{{baseUrl}}/api/orders/{{orderId}}", "host": ["{{baseUrl}}"], "path": ["api", "orders", "{{orderId}}"] } } }
+      ]
+    },
+    {
+      "name": "Admin Orders",
+      "item": [
+        { "name": "List Admin Orders", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }], "url": { "raw": "{{baseUrl}}/api/admin/orders?page=1&limit=10", "host": ["{{baseUrl}}"], "path": ["api", "admin", "orders"], "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "10" }] } } },
+        { "name": "Update Order Status", "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"status\": \"PROCESSING\"\n}" }, "url": { "raw": "{{baseUrl}}/api/admin/orders/{{orderId}}/status", "host": ["{{baseUrl}}"], "path": ["api", "admin", "orders", "{{orderId}}", "status"] } } },
+        { "name": "Update Order Payment", "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"paymentStatus\": \"PAID\"\n}" }, "url": { "raw": "{{baseUrl}}/api/admin/orders/{{orderId}}/payment", "host": ["{{baseUrl}}"], "path": ["api", "admin", "orders", "{{orderId}}", "payment"] } } }
+      ]
+    },
+    {
+      "name": "Inventory",
+      "item": [
+        { "name": "List Inventory Movements", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }], "url": { "raw": "{{baseUrl}}/api/inventory/movements?page=1&limit=10&productId={{productId}}&type=ADMIN_ADJUSTMENT", "host": ["{{baseUrl}}"], "path": ["api", "inventory", "movements"], "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "10" }, { "key": "productId", "value": "{{productId}}" }, { "key": "type", "value": "ADMIN_ADJUSTMENT" }] } } },
+        { "name": "Create Inventory Adjustment", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"productId\": 1,\n  \"quantityChange\": 10,\n  \"note\": \"Restock manual\"\n}" }, "url": { "raw": "{{baseUrl}}/api/inventory/adjustments", "host": ["{{baseUrl}}"], "path": ["api", "inventory", "adjustments"] } } }
+      ]
+    }
+  ]
+}
