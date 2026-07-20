@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { POST as addCartItemRoute } from '@/app/api/cart/items/route'
 import { POST as checkoutRoute } from '@/app/api/checkout/route'
-import { GET as listOrdersRoute, POST as createOrderRoute } from '@/app/api/orders/route'
+import { GET as listOrdersRoute } from '@/app/api/orders/route'
 import { GET as orderDetailRoute } from '@/app/api/orders/[id]/route'
 import { GET as adminOrdersRoute } from '@/app/api/admin/orders/route'
 import { PATCH as updateOrderStatusRoute } from '@/app/api/admin/orders/[id]/status/route'
@@ -83,12 +83,26 @@ describe('orders integration', () => {
     expect(paymentPayload.data.paymentStatus).toBe('PAID')
     expect(paymentPayload.data.status).toBe('PAID')
 
-    const statusResponse = await updateOrderStatusRoute(createJsonRequest(`/api/admin/orders/${orderId}/status`, {
+    const processResponse = await updateOrderStatusRoute(createJsonRequest(`/api/admin/orders/${orderId}/status`, {
+      method: 'PATCH',
+      token: admin.token,
+      body: { status: 'PROCESSING' },
+    }), { params: Promise.resolve({ id: String(orderId) }) })
+    expect(processResponse.status).toBe(200)
+
+    const shippedResponse = await updateOrderStatusRoute(createJsonRequest(`/api/admin/orders/${orderId}/status`, {
+      method: 'PATCH',
+      token: admin.token,
+      body: { status: 'SHIPPED' },
+    }), { params: Promise.resolve({ id: String(orderId) }) })
+    expect(shippedResponse.status).toBe(200)
+
+    const completedResponse = await updateOrderStatusRoute(createJsonRequest(`/api/admin/orders/${orderId}/status`, {
       method: 'PATCH',
       token: admin.token,
       body: { status: 'COMPLETED' },
     }), { params: Promise.resolve({ id: String(orderId) }) })
-    expect(statusResponse.status).toBe(200)
+    expect(completedResponse.status).toBe(200)
 
     const regressResponse = await updateOrderStatusRoute(createJsonRequest(`/api/admin/orders/${orderId}/status`, {
       method: 'PATCH',
@@ -96,23 +110,5 @@ describe('orders integration', () => {
       body: { status: 'PENDING' },
     }), { params: Promise.resolve({ id: String(orderId) }) })
     expect(regressResponse.status).toBe(409)
-  })
-
-  it('returns generic insufficient stock error for legacy order creation', async () => {
-    const customer = await loginAsCustomer()
-    await testPrisma.product.update({ where: { id: 1 }, data: { name: '<img src=x onerror=alert(1)>', stock: 1 } })
-
-    const { response, payload } = await callRoute<{ error: string }>(createOrderRoute, '/api/orders', {
-      method: 'POST',
-      token: customer.token,
-      body: { items: [{ productId: 1, quantity: 2 }] },
-    })
-
-    expect(response.status).toBe(409)
-    expect(payload.error).toBe('Insufficient stock for one or more products')
-    expect(payload.error).not.toContain('<img')
-    expect(await testPrisma.order.count()).toBe(0)
-    expect(await testPrisma.inventoryMovement.count()).toBe(0)
-    expect((await testPrisma.product.findUniqueOrThrow({ where: { id: 1 } })).stock).toBe(1)
   })
 })

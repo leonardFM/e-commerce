@@ -1,6 +1,7 @@
 "use client"
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import type { FormEvent, ReactNode } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import {
@@ -11,8 +12,6 @@ import {
   fetchProducts,
   loginAdmin,
   removeProduct,
-  updateAdminOrderPayment,
-  updateAdminOrderStatus,
   updateProduct,
   type AdminOrder,
   type InventoryMovement,
@@ -46,7 +45,27 @@ function formatMoney(value: number) {
 }
 
 function isAuthError(err: unknown) {
-  return err instanceof Error && (err.message === 'Unauthorized' || err.message === 'Forbidden')
+  return err instanceof Error && ((err as any).status === 401 || (err as any).status === 403)
+}
+
+function orderStatusBadgeClass(status: AdminOrder['status']) {
+  return `stock-pill ${status.toLowerCase()}`
+}
+
+function paymentStatusBadgeClass(status: AdminOrder['paymentStatus']) {
+  return `stock-pill ${status.toLowerCase()}`
+}
+
+function movementTypeBadgeClass(type: InventoryMovement['type']) {
+  return type === 'ORDER_CHECKOUT' ? 'stock-pill checkout' : 'stock-pill admin-adjustment'
+}
+
+function movementTypeLabel(type: InventoryMovement['type']) {
+  return type === 'ORDER_CHECKOUT' ? 'Checkout' : 'Admin'
+}
+
+function movementQuantityBadgeClass(quantityChange: number) {
+  return quantityChange < 0 ? 'stock-pill negative' : 'stock-pill positive'
 }
 
 function AdminLogin({ loading, email, password, setEmail, setPassword, handleLogin }: {
@@ -138,10 +157,17 @@ function AdminShell({ active, email, totalProducts, totalStock, page, totalPages
 }
 
 export function AdminClient({ section }: { section: AdminSection }) {
-  const [token, setToken] = useState('')
+  const router = useRouter()
+  const [authenticated, setAuthenticated] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.localStorage.getItem('admin-role') === 'ADMIN'
+  })
   const [mounted, setMounted] = useState(false)
-  const [email, setEmail] = useState('admin@solutech.test')
-  const [password, setPassword] = useState('password123')
+  const [email, setEmail] = useState(() => {
+    if (typeof window === 'undefined') return ''
+    return window.localStorage.getItem('admin-email') ?? ''
+  })
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
@@ -164,58 +190,44 @@ export function AdminClient({ section }: { section: AdminSection }) {
   }, [products])
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      const savedToken = window.localStorage.getItem('admin-token') ?? ''
-      const savedRole = window.localStorage.getItem('admin-role') ?? ''
-      const savedEmail = window.localStorage.getItem('admin-email') ?? ''
-      if (savedToken && savedRole !== 'ADMIN') {
-        window.localStorage.removeItem('admin-token')
-        window.localStorage.removeItem('admin-role')
-        window.localStorage.removeItem('admin-email')
-      } else {
-        setToken(savedToken)
-        if (savedEmail) setEmail(savedEmail)
-      }
-      setMounted(true)
-    }, 0)
+    const timer = window.setTimeout(() => setMounted(true), 0)
     return () => window.clearTimeout(timer)
   }, [])
 
   useEffect(() => {
-    if (!token) return
+    if (!authenticated) return
     const timer = window.setTimeout(async () => {
       try {
         setError('')
         if (section === 'overview' || section === 'products') {
-          const result = await fetchProducts(token, { page, limit: 8, search })
+          const result = await fetchProducts({ page, limit: 8, search })
           setProducts(result.items)
           setTotalPages(result.meta.totalPages)
           setTotalProducts(result.meta.total)
         }
         if (section === 'overview' || section === 'orders') {
-          const result = await fetchAdminOrders(token, { page: 1, limit: section === 'orders' ? 12 : 5 })
+          const result = await fetchAdminOrders({ page: 1, limit: section === 'orders' ? 12 : 5 })
           setOrders(result.items)
         }
         if (section === 'overview' || section === 'inventory') {
-          const result = await fetchInventoryMovements(token, { page: 1, limit: section === 'inventory' ? 12 : 5 })
+          const result = await fetchInventoryMovements({ page: 1, limit: section === 'inventory' ? 12 : 5 })
           setMovements(result.items)
         }
       } catch (err) {
-        handleAuthFailure(err)
+        if (isAuthError(err)) {
+          window.localStorage.removeItem('admin-role')
+          window.localStorage.removeItem('admin-email')
+          setAuthenticated(false)
+          setProducts([])
+          setOrders([])
+          setMovements([])
+          router.push('/admin')
+        }
         setError(err instanceof Error ? err.message : 'Failed to load admin dashboard')
       }
     }, 200)
     return () => window.clearTimeout(timer)
-  }, [token, page, search, section])
-
-  function handleAuthFailure(err: unknown) {
-    if (!isAuthError(err)) return
-    window.localStorage.removeItem('admin-token')
-    setToken('')
-    setProducts([])
-    setOrders([])
-    setMovements([])
-  }
+  }, [authenticated, page, search, section])
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -225,8 +237,12 @@ export function AdminClient({ section }: { section: AdminSection }) {
     try {
       const result = await loginAdmin(email, password)
       if (result.user.role !== 'ADMIN') throw new Error('Only admin users can access this dashboard')
-      setToken(result.token)
-      window.localStorage.setItem('admin-token', result.token)
+
+      window.localStorage.removeItem('customer-role')
+      window.localStorage.removeItem('customer-email')
+
+      setAuthenticated(true)
+      setEmail(result.user.email)
       window.localStorage.setItem('admin-role', result.user.role)
       window.localStorage.setItem('admin-email', result.user.email)
       setMessage(`Signed in as ${result.user.email}`)
@@ -237,36 +253,35 @@ export function AdminClient({ section }: { section: AdminSection }) {
     }
   }
 
-  async function loadProducts(currentToken = token) {
-    const result = await fetchProducts(currentToken, { page, limit: 8, search })
+  async function loadProducts() {
+    const result = await fetchProducts({ page, limit: 8, search })
     setProducts(result.items)
     setTotalPages(result.meta.totalPages)
     setTotalProducts(result.meta.total)
   }
 
-  async function loadOrders(currentToken = token) {
-    const result = await fetchAdminOrders(currentToken, { page: 1, limit: section === 'orders' ? 12 : 5 })
+  async function loadOrders() {
+    const result = await fetchAdminOrders({ page: 1, limit: section === 'orders' ? 12 : 5 })
     setOrders(result.items)
   }
 
-  async function loadMovements(currentToken = token) {
-    const result = await fetchInventoryMovements(currentToken, { page: 1, limit: section === 'inventory' ? 12 : 5 })
+  async function loadMovements() {
+    const result = await fetchInventoryMovements({ page: 1, limit: section === 'inventory' ? 12 : 5 })
     setMovements(result.items)
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!token) return
     setLoading(true)
     setError('')
     setMessage('')
     try {
       const payload = { name: form.name, description: form.description || null, price: Number(form.price), stock: Number(form.stock) }
       if (form.id === null) {
-        await createProduct(token, payload)
+        await createProduct(payload)
         setMessage('Product created')
       } else {
-        await updateProduct(token, form.id, payload)
+        await updateProduct(form.id, payload)
         setMessage('Product updated')
       }
       setForm(emptyForm())
@@ -279,13 +294,24 @@ export function AdminClient({ section }: { section: AdminSection }) {
     }
   }
 
+  function handleAuthFailure(err: unknown) {
+    if (!isAuthError(err)) return
+    window.localStorage.removeItem('admin-role')
+    window.localStorage.removeItem('admin-email')
+    setAuthenticated(false)
+    setProducts([])
+    setOrders([])
+    setMovements([])
+    router.push('/admin')
+  }
+
   async function handleDelete(id: number) {
-    if (!token || !window.confirm('Delete this product?')) return
+    if (!window.confirm('Delete this product?')) return
     setLoading(true)
     setError('')
     setMessage('')
     try {
-      await removeProduct(token, id)
+      await removeProduct(id)
       setMessage('Product deleted')
       await loadProducts()
     } catch (err) {
@@ -300,57 +326,24 @@ export function AdminClient({ section }: { section: AdminSection }) {
     setForm({ id: product.id, name: product.name, description: product.description ?? '', price: String(product.price), stock: String(product.stock) })
   }
 
-  function logout() {
-    window.localStorage.removeItem('admin-token')
+  async function logout() {
+    await fetch('/api/auth/logout', { method: 'POST' })
     window.localStorage.removeItem('admin-role')
     window.localStorage.removeItem('admin-email')
-    setToken('')
+    setAuthenticated(false)
     setProducts([])
     setOrders([])
     setMovements([])
     setMessage('Signed out')
   }
 
-  async function handleOrderStatus(id: number, status: AdminOrder['status']) {
-    if (!token) return
-    setLoading(true)
-    setError('')
-    try {
-      await updateAdminOrderStatus(token, id, status)
-      await loadOrders()
-      setMessage('Order status updated')
-    } catch (err) {
-      handleAuthFailure(err)
-      setError(err instanceof Error ? err.message : 'Failed to update order status')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleOrderPayment(id: number, paymentStatus: AdminOrder['paymentStatus']) {
-    if (!token) return
-    setLoading(true)
-    setError('')
-    try {
-      await updateAdminOrderPayment(token, id, paymentStatus)
-      await loadOrders()
-      setMessage('Order payment updated')
-    } catch (err) {
-      handleAuthFailure(err)
-      setError(err instanceof Error ? err.message : 'Failed to update payment status')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   async function handleAdjustment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!token) return
     setLoading(true)
     setError('')
     setMessage('')
     try {
-      await createInventoryAdjustment(token, {
+      await createInventoryAdjustment({
         productId: Number(adjustment.productId),
         quantityChange: Number(adjustment.quantityChange),
         note: adjustment.note || undefined,
@@ -372,14 +365,14 @@ export function AdminClient({ section }: { section: AdminSection }) {
   } else if (section === 'products') {
     content = <ProductsPage products={products} form={form} isEditing={isEditing} loading={loading} page={page} totalPages={totalPages} search={search} setForm={setForm} setPage={setPage} setSearch={setSearch} handleSubmit={handleSubmit} handleDelete={handleDelete} startEdit={startEdit} />
   } else if (section === 'orders') {
-    content = <OrdersPage orders={orders} loading={loading} handleOrderStatus={handleOrderStatus} handleOrderPayment={handleOrderPayment} />
+    content = <OrdersPage orders={orders} loading={loading} />
   } else {
     content = <InventoryPage movements={movements} adjustment={adjustment} loading={loading} setAdjustment={setAdjustment} handleAdjustment={handleAdjustment} />
   }
 
   return (
     <main className="admin-page">
-      {!mounted || !token ? <AdminLogin loading={loading} email={email} password={password} setEmail={setEmail} setPassword={setPassword} handleLogin={handleLogin} /> : (
+      {!mounted || !authenticated ? <AdminLogin loading={loading} email={email} password={password} setEmail={setEmail} setPassword={setPassword} handleLogin={handleLogin} /> : (
         <AdminShell active={section} email={email} totalProducts={totalProducts} totalStock={metrics.totalStock} page={page} totalPages={totalPages} logout={logout}>{content}</AdminShell>
       )}
       {error ? <p className="status error">{error}</p> : null}
@@ -427,12 +420,12 @@ function ProductTable({ products, handleDelete, startEdit }: { products: Product
   return <><div className="panel-header"><div><p className="eyebrow">Inventory table</p><h2>Products</h2></div><span className="muted">{products.length} shown</span></div><div className="table-wrap"><table><thead><tr><th>Name</th><th>Price</th><th>Stock</th><th>Actions</th></tr></thead><tbody>{products.map((product) => <tr key={product.id}><td><strong>{product.name}</strong><p className="muted">{product.description ?? '-'}</p></td><td>{formatMoney(product.price)}</td><td><span className={product.stock <= 10 ? 'stock-pill warning' : 'stock-pill'}>{product.stock}</span></td><td><div className="action-row"><button className="ghost-button" onClick={() => startEdit(product)} type="button">Edit</button><button className="danger-button" onClick={() => handleDelete(product.id)} type="button">Delete</button></div></td></tr>)}{products.length === 0 ? <tr><td colSpan={4} className="empty-state">No products found.</td></tr> : null}</tbody></table></div></>
 }
 
-function OrdersPage({ orders, loading, handleOrderStatus, handleOrderPayment }: { orders: AdminOrder[]; loading: boolean; handleOrderStatus: (id: number, status: AdminOrder['status']) => Promise<void>; handleOrderPayment: (id: number, paymentStatus: AdminOrder['paymentStatus']) => Promise<void> }) {
-  return <><div className="dashboard-topbar"><div><p className="eyebrow">Orders</p><h2>Order management</h2><p className="muted">Update fulfillment and payment status.</p></div><span className="stock-pill">{orders.length} shown</span></div><section className="panel"><OrderList orders={orders} loading={loading} handleOrderStatus={handleOrderStatus} handleOrderPayment={handleOrderPayment} /></section></>
+function OrdersPage({ orders, loading }: { orders: AdminOrder[]; loading: boolean }) {
+  return <><div className="dashboard-topbar"><div><p className="eyebrow">Orders</p><h2>Order management</h2><p className="muted">View all orders and their status.</p></div><span className="stock-pill">{orders.length} shown</span></div><section className="panel"><OrderList orders={orders} /></section></>
 }
 
 function OrderList({ orders, loading, handleOrderStatus, handleOrderPayment }: { orders: AdminOrder[]; loading?: boolean; handleOrderStatus?: (id: number, status: AdminOrder['status']) => Promise<void>; handleOrderPayment?: (id: number, paymentStatus: AdminOrder['paymentStatus']) => Promise<void> }) {
-  return <div className="order-list">{orders.map((order) => <article key={order.id} className="order-card"><div><strong>Order #{order.id}</strong><p className="muted">User #{order.userId} · {order.paymentMethod} · {formatMoney(order.total)}</p><p className="muted">Ship to {order.shippingName}, {order.shippingCity}</p></div>{handleOrderStatus && handleOrderPayment ? <div className="two-cols"><label>Status<select disabled={loading} value={order.status} onChange={(event) => handleOrderStatus(order.id, event.target.value as AdminOrder['status'])}><option value="PENDING">PENDING</option><option value="PAID">PAID</option><option value="PROCESSING">PROCESSING</option><option value="SHIPPED">SHIPPED</option><option value="COMPLETED">COMPLETED</option></select></label><label>Payment<select disabled={loading} value={order.paymentStatus} onChange={(event) => handleOrderPayment(order.id, event.target.value as AdminOrder['paymentStatus'])}><option value="PENDING">PENDING</option><option value="PAID">PAID</option></select></label></div> : <span className="stock-pill">{order.status}</span>}</article>)}{orders.length === 0 ? <p className="empty-state">No orders found.</p> : null}</div>
+  return <div className="order-list">{orders.map((order) => <article key={order.id} className="order-card"><div><strong>Order #{order.id}</strong><div className="badge-row"><span className={orderStatusBadgeClass(order.status)}>{order.status}</span><span className={paymentStatusBadgeClass(order.paymentStatus)}>Payment {order.paymentStatus}</span></div><p className="muted">User #{order.userId} · {order.paymentMethod} · {formatMoney(order.total)}</p><p className="muted">Ship to {order.shippingName}, {order.shippingCity}</p></div>{handleOrderStatus && handleOrderPayment ? <div className="two-cols"><label>Status<span className={orderStatusBadgeClass(order.status)}>{order.status}</span><select disabled={loading} value={order.status} onChange={(event) => handleOrderStatus(order.id, event.target.value as AdminOrder['status'])}><option value="PENDING">PENDING</option><option value="PAID">PAID</option><option value="PROCESSING">PROCESSING</option><option value="SHIPPED">SHIPPED</option><option value="COMPLETED">COMPLETED</option></select></label><label>Payment<span className={paymentStatusBadgeClass(order.paymentStatus)}>{order.paymentStatus}</span><select disabled={loading} value={order.paymentStatus} onChange={(event) => handleOrderPayment(order.id, event.target.value as AdminOrder['paymentStatus'])}><option value="PENDING">PENDING</option><option value="PAID">PAID</option></select></label></div> : null}</article>)}{orders.length === 0 ? <p className="empty-state">No orders found.</p> : null}</div>
 }
 
 function InventoryPage({ movements, adjustment, loading, setAdjustment, handleAdjustment }: { movements: InventoryMovement[]; adjustment: { productId: string; quantityChange: string; note: string }; loading: boolean; setAdjustment: (value: { productId: string; quantityChange: string; note: string }) => void; handleAdjustment: (event: FormEvent<HTMLFormElement>) => Promise<void> }) {
@@ -440,5 +433,5 @@ function InventoryPage({ movements, adjustment, loading, setAdjustment, handleAd
 }
 
 function MovementList({ movements }: { movements: InventoryMovement[] }) {
-  return <div className="order-list">{movements.map((movement) => <article key={movement.id} className="order-card"><strong>{movement.productName}</strong><p className="muted">{movement.type} · {movement.quantityChange > 0 ? '+' : ''}{movement.quantityChange}</p><p className="muted">Stock {movement.stockBefore} → {movement.stockAfter}</p><p className="muted">{movement.note ?? '-'}</p></article>)}{movements.length === 0 ? <p className="empty-state">No movements found.</p> : null}</div>
+  return <div className="order-list">{movements.map((movement) => <article key={movement.id} className="order-card"><div><strong>{movement.productName}</strong><div className="badge-row"><span className={movementTypeBadgeClass(movement.type)}>{movementTypeLabel(movement.type)}</span><span className={movementQuantityBadgeClass(movement.quantityChange)}>{movement.quantityChange > 0 ? '+' : ''}{movement.quantityChange}</span></div><p className="muted">Stock {movement.stockBefore} → {movement.stockAfter}</p><p className="muted">{movement.note ?? '-'}</p></div></article>)}{movements.length === 0 ? <p className="empty-state">No movements found.</p> : null}</div>
 }

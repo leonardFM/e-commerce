@@ -35,6 +35,7 @@ export default async function Home() {
         <div className="nav-links">
           <a href="#categories">Kategori</a>
           <a href="#featured">Produk</a>
+          <Link href="/register">Register</Link>
           <Link href="/customer">Customer</Link>
           <Link href="/admin">Admin</Link>
         </div>
@@ -49,6 +50,7 @@ export default async function Home() {
           </p>
           <div className="storefront-actions">
             <Link className="primary-button" href="/customer">Mulai belanja</Link>
+            <Link className="ghost-button" href="/register">Daftar customer</Link>
             <Link className="ghost-button" href="#featured">Lihat produk</Link>
           </div>
         </div>
@@ -127,7 +129,8 @@ export default async function Home() {
           <p>Customer dashboard untuk cart dan checkout. Admin dashboard untuk katalog, order, dan inventory.</p>
         </div>
         <div className="storefront-actions">
-          <Link className="primary-button" href="/customer">Customer</Link>
+          <Link className="primary-button" href="/register">Register customer</Link>
+          <Link className="ghost-button" href="/customer">Customer</Link>
           <Link className="ghost-button" href="/admin">Admin</Link>
         </div>
       </section>

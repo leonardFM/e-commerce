@@ -1,5 +1,4 @@
 export type AuthResponse = {
-  token: string
   user: {
     id: number
     email: string
@@ -73,16 +72,11 @@ export type InventoryMovementListResponse = {
 async function readJson<T>(response: Response): Promise<T> {
   const payload = await response.json()
   if (!response.ok) {
-    throw new Error(payload?.error ?? 'Request failed')
+    const error = new Error(payload?.error ?? 'Request failed')
+    ;(error as any).status = response.status
+    throw error
   }
   return payload.data as T
-}
-
-function authHeaders(token: string) {
-  return {
-    Authorization: `Bearer ${token}`,
-    'Content-Type': 'application/json',
-  }
 }
 
 export async function loginAdmin(email: string, password: string) {
@@ -95,20 +89,18 @@ export async function loginAdmin(email: string, password: string) {
   return readJson<AuthResponse>(response)
 }
 
-export async function fetchProducts(token: string, params: { page: number; limit: number; search: string }) {
+export async function fetchProducts(params: { page: number; limit: number; search: string }) {
   const url = new URL('/api/products', window.location.origin)
   url.searchParams.set('page', String(params.page))
   url.searchParams.set('limit', String(params.limit))
   if (params.search) url.searchParams.set('search', params.search)
 
-  const response = await fetch(url.toString(), {
-    headers: authHeaders(token),
-  })
+  const response = await fetch(url.toString())
 
   return readJson<ProductListResponse>(response)
 }
 
-export async function createProduct(token: string, input: {
+export async function createProduct(input: {
   name: string
   description?: string | null
   price: number
@@ -116,14 +108,14 @@ export async function createProduct(token: string, input: {
 }) {
   const response = await fetch('/api/products', {
     method: 'POST',
-    headers: authHeaders(token),
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   })
 
   return readJson<ProductItem>(response)
 }
 
-export async function updateProduct(token: string, id: number, input: Partial<{
+export async function updateProduct(id: number, input: Partial<{
   name: string
   description: string | null
   price: number
@@ -131,70 +123,65 @@ export async function updateProduct(token: string, id: number, input: Partial<{
 }>) {
   const response = await fetch(`/api/products/${id}`, {
     method: 'PATCH',
-    headers: authHeaders(token),
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   })
 
   return readJson<ProductItem>(response)
 }
 
-export async function removeProduct(token: string, id: number) {
+export async function removeProduct(id: number) {
   const response = await fetch(`/api/products/${id}`, {
     method: 'DELETE',
-    headers: authHeaders(token),
   })
 
   return readJson<{ deleted: boolean }>(response)
 }
 
-export async function fetchAdminOrders(token: string, params: { page: number; limit: number }) {
+export async function fetchAdminOrders(params: { page: number; limit: number }) {
   const url = new URL('/api/admin/orders', window.location.origin)
   url.searchParams.set('page', String(params.page))
   url.searchParams.set('limit', String(params.limit))
 
-  const response = await fetch(url.toString(), {
-    headers: authHeaders(token),
-  })
+  const response = await fetch(url.toString())
 
   return readJson<AdminOrderListResponse>(response)
 }
 
-export async function updateAdminOrderStatus(token: string, id: number, status: AdminOrder['status']) {
+export async function updateAdminOrderStatus(id: number, status: AdminOrder['status']) {
   const response = await fetch(`/api/admin/orders/${id}/status`, {
     method: 'PATCH',
-    headers: authHeaders(token),
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status }),
   })
 
   return readJson<AdminOrder>(response)
 }
 
-export async function updateAdminOrderPayment(token: string, id: number, paymentStatus: AdminOrder['paymentStatus']) {
+export async function updateAdminOrderPayment(id: number, paymentStatus: AdminOrder['paymentStatus']) {
   const response = await fetch(`/api/admin/orders/${id}/payment`, {
     method: 'PATCH',
-    headers: authHeaders(token),
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ paymentStatus }),
   })
 
   return readJson<AdminOrder>(response)
 }
 
-export async function fetchInventoryMovements(token: string, params: { page: number; limit: number }) {
+export async function fetchInventoryMovements(params: { page: number; limit: number }) {
   const url = new URL('/api/inventory/movements', window.location.origin)
   url.searchParams.set('page', String(params.page))
   url.searchParams.set('limit', String(params.limit))
 
-  const response = await fetch(url.toString(), {
-    headers: authHeaders(token),
-  })
+  const response = await fetch(url.toString())
 
   return readJson<InventoryMovementListResponse>(response)
 }
 
-export async function createInventoryAdjustment(token: string, input: { productId: number; quantityChange: number; note?: string }) {
+export async function createInventoryAdjustment(input: { productId: number; quantityChange: number; note?: string }) {
   const response = await fetch('/api/inventory/adjustments', {
     method: 'POST',
-    headers: authHeaders(token),
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   })
 

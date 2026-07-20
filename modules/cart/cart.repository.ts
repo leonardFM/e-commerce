@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { AppError } from '@/lib/errors'
 import type { AddCartItemInput, CartRecord } from './cart.types'
 
 type CartWithItems = {
@@ -11,7 +12,7 @@ type CartWithItems = {
     product: {
       name: string
       description: string | null
-      price: number
+      price: unknown
       stock: number
     }
   }>
@@ -20,16 +21,19 @@ type CartWithItems = {
 }
 
 function toCartRecord(cart: CartWithItems): CartRecord {
-  const items = cart.items.map((item) => ({
-    id: item.id,
-    productId: item.productId,
-    productName: item.product.name,
-    productDescription: item.product.description,
-    unitPrice: item.product.price,
-    stock: item.product.stock,
-    quantity: item.quantity,
-    lineTotal: item.product.price * item.quantity,
-  }))
+  const items = cart.items.map((item) => {
+    const unitPrice = Number(item.product.price)
+    return {
+      id: item.id,
+      productId: item.productId,
+      productName: item.product.name,
+      productDescription: item.product.description,
+      unitPrice,
+      stock: item.product.stock,
+      quantity: item.quantity,
+      lineTotal: unitPrice * item.quantity,
+    }
+  })
 
   return {
     id: cart.id,
@@ -58,7 +62,12 @@ export async function getOrCreateCart(userId: number) {
     include: cartInclude,
   })
 
-  return toCartRecord(cart)
+  const filteredCart = {
+    ...cart,
+    items: cart.items.filter((item) => !item.product.deletedAt),
+  }
+
+  return toCartRecord(filteredCart)
 }
 
 export async function findActiveProduct(productId: number) {
@@ -73,19 +82,41 @@ export async function findCartItem(userId: number, productId: number) {
 }
 
 export async function addCartItem(userId: number, input: AddCartItemInput) {
-  const cart = await prisma.cart.upsert({
-    where: { userId },
-    update: {},
-    create: { userId },
-  })
+  return prisma.$transaction(async (tx) => {
+    const cart = await tx.cart.upsert({
+      where: { userId },
+      update: {},
+      create: { userId },
+    })
 
-  await prisma.cartItem.upsert({
-    where: { cartId_productId: { cartId: cart.id, productId: input.productId } },
-    update: { quantity: { increment: input.quantity } },
-    create: { cartId: cart.id, productId: input.productId, quantity: input.quantity },
-  })
+    // Lock product row with FOR UPDATE to prevent race condition
+    await tx.$executeRaw`SELECT id FROM "Product" WHERE id = ${input.productId} FOR UPDATE`
 
-  return getOrCreateCart(userId)
+    const product = await tx.product.findFirst({
+      where: { id: input.productId, deletedAt: null },
+    })
+    if (!product) throw new AppError('Product not found', 404)
+
+    const existing = await tx.cartItem.findUnique({
+      where: { cartId_productId: { cartId: cart.id, productId: input.productId } },
+    })
+    const nextQuantity = (existing?.quantity ?? 0) + input.quantity
+    if (nextQuantity > product.stock) throw new AppError('Quantity exceeds product stock', 409)
+
+    await tx.cartItem.upsert({
+      where: { cartId_productId: { cartId: cart.id, productId: input.productId } },
+      update: { quantity: { increment: input.quantity } },
+      create: { cartId: cart.id, productId: input.productId, quantity: input.quantity },
+    })
+
+    const fullCart = await tx.cart.findUnique({
+      where: { userId },
+      include: cartInclude,
+    })
+    if (!fullCart) throw new AppError('Cart not found', 500)
+
+    return toCartRecord(fullCart)
+  })
 }
 
 export async function setCartItemQuantity(userId: number, productId: number, quantity: number) {

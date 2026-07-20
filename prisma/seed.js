@@ -4,6 +4,11 @@ const { PrismaClient } = require('@prisma/client')
 const prisma = new PrismaClient()
 
 async function main() {
+  if (process.env.NODE_ENV === 'production' && !process.env.SEED_CONFIRM) {
+    console.error('Seed aborted: database is in production mode. Set SEED_CONFIRM=1 to proceed.')
+    process.exit(1)
+  }
+
   await prisma.inventoryMovement.deleteMany()
   await prisma.cartItem.deleteMany()
   await prisma.cart.deleteMany()
@@ -12,7 +17,8 @@ async function main() {
   await prisma.product.deleteMany()
   await prisma.user.deleteMany()
 
-  const passwordHash = await bcrypt.hash('password123', 10)
+  const seedPassword = process.env.SEED_PASSWORD || 'password123'
+  const passwordHash = await bcrypt.hash(seedPassword, 10)
 
   const user = await prisma.user.create({
     data: {
@@ -40,8 +46,8 @@ async function main() {
     ],
   })
 
-  console.log(`Seeded user ${user.email} with password password123`)
-  console.log(`Seeded user ${customer.email} with password password123`)
+  console.log(`Seeded user ${user.email}`)
+  console.log(`Seeded user ${customer.email}`)
 }
 
 main()

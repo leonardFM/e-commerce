@@ -49,16 +49,23 @@ export async function checkoutCart(userId: number, input: CheckoutInput, payment
 
     for (const item of cart.items) {
       if (item.product.deletedAt) throw new AppError('One or more products not found', 404)
+    }
+
+    const subtotal = cart.items.reduce((sum, item) => sum + Number(item.product.price) * item.quantity, 0)
+    const total = subtotal + input.shippingCost
+
+    for (const item of cart.items) {
       if (item.product.stock < item.quantity) throw new AppError(insufficientStockMessage, 409)
     }
 
-    const subtotal = cart.items.reduce((sum, item) => sum + item.product.price * item.quantity, 0)
-    const total = subtotal + input.shippingCost
+    // Lock product rows with FOR UPDATE before stock decrement
+    for (const item of cart.items) {
+      await tx.$executeRaw`SELECT stock FROM "Product" WHERE id = ${item.productId} FOR UPDATE`
+    }
+
     const stockSnapshots = new Map<number, { before: number; after: number }>()
 
     for (const item of cart.items) {
-      const stockBefore = item.product.stock
-      const stockAfter = stockBefore - item.quantity
       const result = await tx.product.updateMany({
         where: {
           id: item.productId,
@@ -71,7 +78,19 @@ export async function checkoutCart(userId: number, input: CheckoutInput, payment
       })
 
       if (result.count !== 1) throw new AppError(insufficientStockMessage, 409)
-      stockSnapshots.set(item.productId, { before: stockBefore, after: stockAfter })
+    }
+
+    // Read actual stock after update for accurate audit trail
+    for (const item of cart.items) {
+      const updated = await tx.product.findUnique({
+        where: { id: item.productId },
+        select: { stock: true },
+      })
+      if (!updated) throw new AppError('Product not found', 404)
+      stockSnapshots.set(item.productId, {
+        before: updated.stock + item.quantity,
+        after: updated.stock,
+      })
     }
 
     const order = await tx.order.create({
@@ -92,8 +111,9 @@ export async function checkoutCart(userId: number, input: CheckoutInput, payment
         items: {
           create: cart.items.map((item) => ({
             productId: item.productId,
+            productName: item.product.name,
             quantity: item.quantity,
-            unitPrice: item.product.price,
+            unitPrice: Number(item.product.price),
           })),
         },
       },

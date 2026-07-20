@@ -7,7 +7,7 @@ Panduan untuk agent yang bekerja di repo ini.
 - Project ini adalah backend e-commerce berbasis Next.js App Router, TypeScript, Prisma, PostgreSQL, Redis, dan JWT auth.
 - API utama ada di `app/api/**/route.ts`.
 - Logika domain ada di `modules/<domain>/` dengan pola `schema`, `service`, `repository`, dan `types`.
-- Helper umum ada di `lib/`.
+- Helper umum ada di `lib/` (termasuk `lib/token-context.ts` untuk AsyncLocalStorage token context sliding session).
 - Database didefinisikan di `prisma/schema.prisma` dan SQL awal di `database/create-tables.sql`.
 
 ## Commands
@@ -29,14 +29,15 @@ Panduan untuk agent yang bekerja di repo ini.
 
 - Salin `.env.example` ke `.env` untuk menjalankan lokal.
 - `DATABASE_URL` wajib untuk Prisma/PostgreSQL.
-- `JWT_SECRET` wajib untuk sign dan verify token.
-- `REDIS_URL` opsional untuk cache, rate limit, dan lock Redis; jika tidak diisi, helper Redis/cache harus fail-open dan aplikasi tetap berjalan tanpa Redis.
+- `JWT_SECRET` wajib untuk sign dan verify token. Minimal 32 karakter; tidak boleh placeholder `change-me-in-production`.
+- `REDIS_URL` opsional untuk cache, rate limit, lock Redis, dan token blacklist; jika tidak diisi, semua helper harus fail-open dan aplikasi tetap berjalan tanpa Redis.
 - `LOG_LEVEL` opsional untuk mengatur level structured logger Pino; default `debug` di development dan `info` di environment lain.
 - `LOG_DESTINATION` opsional untuk tujuan log Pino; nilai yang didukung minimal `stdout` dan `file`. Gunakan `file` untuk demo/local file logging, dan `stdout` untuk production cloud/container.
 - `LOG_FILE_PATH` opsional untuk path file log saat `LOG_DESTINATION=file`; default `logs/app.jsonl`.
 - `SLOW_QUERY_THRESHOLD_MS` opsional untuk threshold warning query Prisma lambat; default `100` ms.
 - `SLOW_CACHE_THRESHOLD_MS` opsional untuk threshold warning operasi cache lambat; default `50` ms.
 - Untuk automated integration test, gunakan PostgreSQL database terpisah seperti `solutech_test`; jangan gunakan database development untuk test yang menjalankan cleanup data.
+- `SEED_PASSWORD` opsional untuk kustomisasi password user seed; default `password123`.
 - Jangan commit `.env`, secret, token, file dalam `logs/`, atau data kredensial lain.
 
 ## Architecture Rules
@@ -55,6 +56,13 @@ Panduan untuk agent yang bekerja di repo ini.
 - Query performance dan cache performance logs harus memakai structured logger Pino.
 - Jangan log raw SQL params, raw cache key, raw Redis key, raw email, payment reference, shipping phone, atau shipping address.
 - Jangan log password, JWT token, authorization header, secret, atau data sensitif lain.
+
+## Request Logging
+
+- Next.js 16 secara built-in mencatat setiap request dengan format: `{method} {path} {status} in {duration}ms (next.js: Xms, proxy.ts: Xms, application-code: Xms)`.
+- Tidak perlu `middleware.ts` atau custom `proxy.ts` untuk logging request — Next.js sudah menyediakan timing breakdown.
+- Error response (AppError/ZodError/unhandled) tetap di-log via Pino di `failure()` di `lib/response.ts` untuk structured logging.
+- Body request tidak pernah di-log oleh kode aplikasi.
 
 ## Docs Workflow
 
@@ -75,10 +83,33 @@ Panduan untuk agent yang bekerja di repo ini.
 - Jangan menaruh secret langsung di source code.
 - Untuk data user-scoped, selalu filter berdasarkan `user.userId` dari token, bukan dari body request.
 - Endpoint login ada di `POST /api/auth/login`.
-- Input string publik/admin harus dinormalisasi dengan Zod (`trim()` dan batas `max()` yang sesuai domain) untuk mengurangi risiko payload besar dan reflected/stored XSS.
+- Input string publik/admin harus dinormalisasi dengan Zod (`trim()` dan batas `max()` yang sesuai domain) untuk mengurangi risiko payload besar dan reflected/stored XSS. Semua string input juga di-sanitize HTML (strip all tags) via `sanitize()` dari `lib/sanitize.ts` yang menggunakan library `sanitize-html`.
 - Jangan render HTML dari input user/admin. UI harus tetap memakai JSX text interpolation, bukan `dangerouslySetInnerHTML`, kecuali ada sanitizer/allowlist khusus.
 - Pesan error API tidak boleh memantulkan data user/admin-generated seperti nama produk; gunakan pesan generik untuk konflik stok atau validasi bisnis.
-- Security headers baseline dikonfigurasi di `next.config.mjs`: `X-Content-Type-Options`, `Referrer-Policy`, dan `X-Frame-Options`. CSP belum diaktifkan dan harus diuji build/browser sebelum ditambahkan.
+- Validation error (Zod) response di `lib/response.ts` sudah disanitasi: hanya mengembalikan `path`, `code`, dan `message`; tidak mengembalikan `received` value.
+- JWT access token TTL adalah 10 menit dengan sliding session (di `lib/auth.ts`). Setiap request autentikasi dengan sisa token < 2 menit akan mendapatkan token baru via HttpOnly cookie (`token`). Client API wrapper tidak perlu menyimpan token karena browser otomatis mengirim cookie.
+- Password policy: minimal 10 karakter, maksimal 128 karakter (di `modules/auth/auth.schema.ts`).
+- Duplicate register mengembalikan `Registration failed` (409) generic untuk mengurangi enumerasi user.
+- Login rate limit menggunakan kombinasi email + IP (`x-forwarded-for` atau `x-real-ip`) dan global throttle per IP (20 request/menit). Jika Redis tidak tersedia, rate limit fail-open.
+- Register rate limit per IP (3 request/jam). Jika Redis tidak tersedia, rate limit fail-open.
+- `requireUser()` di `lib/request.ts` setelah verifikasi JWT melakukan pengecekan ke database bahwa user masih ada dan token tidak di-blacklist. User yang dihapus dari DB mendapat 401; token yang di-logout via `POST /api/auth/logout` langsung di-blacklist via Redis dengan TTL sesuai sisa token.
+- Token revocation menggunakan Redis key `token-blacklist:<jti>` dengan TTL otomatis. Jika Redis tidak tersedia, fail-open (semua token dianggap valid).
+- Security headers baseline dikonfigurasi di `next.config.mjs`: `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, `Strict-Transport-Security` (production only), `Permissions-Policy`, dan `Content-Security-Policy`.
+- CSP aktif dengan:
+  - `default-src 'self'`
+  - `script-src 'self' 'unsafe-inline'` (nonce strategy belum diimplementasikan — `'unsafe-inline'` diperlukan oleh Next.js inline scripts)
+  - `upgrade-insecure-requests` (memaksa HTTPS)
+  - `style-src 'self' 'unsafe-inline'` (diperlukan oleh CSS-in-JS / Next.js)
+  - `img-src 'self' data:`
+  - `frame-ancestors 'none'`
+  - `base-uri 'self'`
+  - `form-action 'self'`
+- `'unsafe-eval'` sudah dihapus dari `script-src`.
+- `object-src 'none'` dan `worker-src 'self'` ditambahkan ke CSP.
+- Order status mengikuti state machine ketat: PENDING → PAID/PROCESSING → SHIPPED → COMPLETED. Transisi invalid ditolak dengan 409.
+- Payment status tidak boleh regress dari PAID ke PENDING; ditolak dengan 409.
+- `updateOrderPayment` hanya auto-set status ke PAID jika current status adalah PENDING; PROCESSING/SHIPPED tetap pada statusnya.
+- Checkout rate limit: 10 checkout/jam per user+IP. Jika Redis tidak tersedia, fail-open.
 
 ## Database And Prisma
 
@@ -93,12 +124,13 @@ Panduan untuk agent yang bekerja di repo ini.
 - Inventory adjustment admin harus mencatat `InventoryMovement` dan tidak boleh membuat stok negatif.
 - Jangan mengubah schema Prisma tanpa memperbarui SQL/migration atau instruksi setup terkait jika diperlukan.
 - Setelah mengubah `prisma/schema.prisma`, jalankan `npm run prisma:generate`.
+- Check constraints (stock >= 0, price >= 0, quantity > 0, shippingCost >= 0, subtotal >= 0, total >= 0) hanya didefinisikan di `database/create-tables.sql`, tidak di Prisma schema. Setelah `prisma db push` atau migration baru, constraint ini harus ditambahkan manual ke database.
 
 ## API Conventions
 
 - Gunakan `NextRequest` untuk route yang membutuhkan header, query, atau body.
 - Parse query dengan `Object.fromEntries(request.nextUrl.searchParams)` lalu validasi lewat schema.
-- Parse body dengan `await request.json()` lalu validasi lewat schema.
+- Parse body dengan `getJsonBody(request)` dari `lib/request.ts` (membatasi ukuran body hingga 100KB) lalu validasi lewat schema.
 - Status create gunakan `success(data, 201)`.
 - Validation error ditangani oleh `failure()` sebagai HTTP 400.
 - Gunakan HTTP 401 untuk unauthenticated, 403 untuk forbidden/role tidak sesuai, 404 untuk resource tidak ditemukan, dan 409 untuk konflik seperti insufficient stock.
@@ -108,17 +140,21 @@ Panduan untuk agent yang bekerja di repo ini.
 - `/` adalah storefront/homepage toko online dan mengambil produk unggulan aktif secara server-side dari Prisma.
 - `/admin` adalah dashboard overview admin client-side; UI harus menolak user non-`ADMIN`, dan API mutasi admin tetap wajib memakai `requireRole(request, 'ADMIN')`.
 - `/admin/products`, `/admin/orders`, dan `/admin/inventory` adalah halaman admin client-side terpisah untuk manajemen produk, order, dan inventory.
+- `/register` adalah halaman registrasi customer client-side yang memanggil `POST /api/auth/register`, menyimpan token customer ke localStorage, lalu redirect ke `/customer`.
+- `/docs` adalah halaman interaktif dokumentasi API berbasis Swagger UI (client component).
 - `/customer` adalah dashboard customer client-side untuk katalog, persistent cart, checkout, dan riwayat order; UI harus menolak user non-`CUSTOMER`.
 - Cart customer dipersist di database lewat `Cart` dan `CartItem`; endpoint cart wajib user-scoped memakai `user.userId` dari JWT.
 
 ## Existing Endpoints
 
 - `POST /api/auth/login`
-- `GET /api/products`
-- `POST /api/products`
-- `GET /api/products/:id`
-- `PATCH /api/products/:id`
-- `DELETE /api/products/:id`
+- `POST /api/auth/register`
+- `POST /api/auth/logout`
+- `GET /api/products` (require login)
+- `POST /api/products` (admin only)
+- `GET /api/products/:id` (require login)
+- `PATCH /api/products/:id` (admin only)
+- `DELETE /api/products/:id` (admin only)
 - `GET /api/cart`
 - `DELETE /api/cart`
 - `POST /api/cart/items`
@@ -126,13 +162,14 @@ Panduan untuk agent yang bekerja di repo ini.
 - `DELETE /api/cart/items/:productId`
 - `POST /api/checkout`
 - `GET /api/orders`
-- `POST /api/orders`
 - `GET /api/orders/:id`
 - `GET /api/admin/orders`
 - `PATCH /api/admin/orders/:id/status`
 - `PATCH /api/admin/orders/:id/payment`
 - `GET /api/inventory/movements`
 - `POST /api/inventory/adjustments`
+- `GET /api/docs` (OpenAPI spec JSON)
+- `/docs` (Swagger UI page)
 
 ## Code Style
 
@@ -165,6 +202,13 @@ Panduan untuk agent yang bekerja di repo ini.
 - Verifikasi checkout payment simulation: `EWALLET` default paid, `COD` pending, dan `simulatePaymentStatus: FAILED` harus gagal tanpa order/stok/cart berubah.
 - Verifikasi admin flow: login admin, create/update/delete product dari dashboard.
 - Verifikasi admin order/inventory flow: lihat semua order, update payment/status, buat inventory adjustment positif/negatif valid, dan pastikan adjustment negatif melebihi stok gagal.
+- Verifikasi sliding session:
+  - Login admin → dapat token dengan TTL 10 menit.
+  - Akses endpoint → response tanpa token baru (sisa masih > 2 menit).
+  - Akses endpoint saat sisa < 2 menit → response **dengan** `token` baru.
+  - Client localStorage terupdate dengan token baru.
+  - Tab didiamkan > 10 menit → token expired → request berikutnya dapat 401.
+  - Customer flow yang sama.
 
 ## Git Safety
 

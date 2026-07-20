@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { sanitize } from '@/lib/sanitize'
 
 export const listInventoryMovementsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -10,5 +11,5 @@ export const listInventoryMovementsQuerySchema = z.object({
 export const inventoryAdjustmentSchema = z.object({
   productId: z.number().int().positive(),
   quantityChange: z.number().int().refine((value) => value !== 0, 'Quantity change cannot be zero'),
-  note: z.string().trim().max(500).optional(),
+  note: z.string().trim().max(500).optional().transform((v) => v ? sanitize(v) : v),
 })

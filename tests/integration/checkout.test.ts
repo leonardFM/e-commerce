@@ -46,7 +46,7 @@ describe('checkout integration', () => {
     expect(payload.data.order.status).toBe('PAID')
     expect(payload.data.order.paymentStatus).toBe('PAID')
     expect(payload.data.order.subtotal + payload.data.order.shippingCost).toBe(payload.data.order.total)
-    expect(payload.data.order.items).toEqual([{ id: expect.any(Number), productId: 1, productName: productBefore.name, quantity: 2, unitPrice: productBefore.price }])
+    expect(payload.data.order.items).toEqual([{ id: expect.any(Number), productId: 1, productName: productBefore.name, quantity: 2, unitPrice: Number(productBefore.price) }])
 
     const productAfter = await testPrisma.product.findUniqueOrThrow({ where: { id: 1 } })
     expect(productAfter.stock).toBe(productBefore.stock - 2)
